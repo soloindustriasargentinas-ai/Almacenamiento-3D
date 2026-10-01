@@ -79,31 +79,69 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const summary = calculateSummary(state);
   const isSalon = state.activeSection === 'salon';
 
-  // Tabs configuration for Salón (ordered: Espacio/Depósito, Obstáculos, Puertas, Heladeras, Check Outs, G. Pared, G. Central, Punteras, Vista)
-  const salonTabs = [
+  // Tabs configuration for Salón - Renglón 1: Entorno & Periféricos
+  const salonTabsRow1 = [
     { id: 'salon-espacio' as ActiveTab, label: 'Espacio', icon: Building2, color: 'text-indigo-400' },
     { id: 'salon-obstaculos' as ActiveTab, label: 'Obstáculos', icon: ShieldAlert, color: 'text-orange-400' },
     { id: 'salon-puertas' as ActiveTab, label: 'Puertas', icon: DoorOpen, color: 'text-blue-400' },
     { id: 'heladeras' as ActiveTab, label: 'Heladeras', icon: Snowflake, color: 'text-cyan-400' },
     { id: 'checkouts' as ActiveTab, label: 'Check Outs', icon: CreditCard, color: 'text-emerald-400' },
+  ];
+
+  // Tabs configuration for Salón - Renglón 2: Góndolas & Visor
+  const salonTabsRow2 = [
     { id: 'gondola-pared' as ActiveTab, label: 'G. Pared', icon: Store, color: 'text-rose-400' },
     { id: 'gondola-central' as ActiveTab, label: 'G. Central', icon: Columns3, color: 'text-pink-400' },
     { id: 'punteras' as ActiveTab, label: 'Punteras', icon: Package, color: 'text-amber-400' },
     { id: 'vista' as ActiveTab, label: 'Vista', icon: Eye, color: 'text-purple-400' },
   ];
 
-  // Tabs configuration for Depósito (ordered: Espacio/Depósito, Obstáculos, Puertas, Estanterías, R. Livianos, R. Pesados, Vista)
-  const depositoTabs = [
+  // Tabs configuration for Depósito - Renglón 1: Espacio, Obstáculos, Puertas, Estanterías
+  const depositoTabsRow1 = [
     { id: 'deposito-espacio' as ActiveTab, label: 'Espacio', icon: Building2, color: 'text-indigo-400' },
     { id: 'deposito-obstaculos' as ActiveTab, label: 'Obstáculos', icon: ShieldAlert, color: 'text-cyan-400' },
     { id: 'deposito-puertas' as ActiveTab, label: 'Puertas', icon: DoorClosed, color: 'text-blue-400' },
     { id: 'estanterias' as ActiveTab, label: 'Estanterías', icon: Layers, color: 'text-sky-400' },
+  ];
+
+  // Tabs configuration for Depósito - Renglón 2: R. Livianos, R. Pesados, Vista
+  const depositoTabsRow2 = [
     { id: 'racks-livianos' as ActiveTab, label: 'R. Livianos', icon: Boxes, color: 'text-amber-500' },
     { id: 'racks-pesados' as ActiveTab, label: 'R. Pesados', icon: Layers, color: 'text-orange-500' },
     { id: 'vista' as ActiveTab, label: 'Vista', icon: Eye, color: 'text-purple-400' },
   ];
 
-  const tabs = isSalon ? salonTabs : depositoTabs;
+  const tabsRow1 = isSalon ? salonTabsRow1 : depositoTabsRow1;
+  const tabsRow2 = isSalon ? salonTabsRow2 : depositoTabsRow2;
+
+  const renderTabButton = (tab: { id: ActiveTab; label: string; icon: any; color: string }) => {
+    const Icon = tab.icon;
+    const isActive =
+      activeTab === tab.id ||
+      (tab.id === 'salon-espacio' && activeTab === 'deposito') ||
+      (tab.id === 'deposito-espacio' && activeTab === 'deposito') ||
+      (tab.id === 'salon-obstaculos' && activeTab === 'obstaculos') ||
+      (tab.id === 'deposito-obstaculos' && activeTab === 'obstaculos') ||
+      (tab.id === 'racks-livianos' && activeTab === 'miniracks');
+
+    return (
+      <button
+        key={tab.id}
+        onClick={() => onTabChange(tab.id)}
+        className={`min-w-0 py-1.5 px-0.5 rounded-lg flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold border transition-all cursor-pointer text-center leading-tight select-none ${
+          isActive
+            ? isSalon
+              ? 'border-rose-500/80 text-rose-200 bg-rose-950/70 shadow-sm shadow-rose-900/30 ring-1 ring-rose-500/40'
+              : 'border-blue-500/80 text-blue-200 bg-blue-950/70 shadow-sm shadow-blue-900/30 ring-1 ring-blue-500/40'
+            : 'border-slate-800/80 bg-slate-900/50 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 hover:border-slate-700'
+        }`}
+        title={tab.label}
+      >
+        <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? tab.color : 'text-slate-400'}`} />
+        <span className="truncate w-full block text-center tracking-tight">{tab.label}</span>
+      </button>
+    );
+  };
 
   // ── Handlers Miniracks ──
   const setMinirackHeight = (h: number) => {
@@ -1028,7 +1066,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <aside
       id="sidebar"
-      className="w-96 flex-shrink-0 bg-slate-900 border-r border-slate-800 flex flex-col h-full overflow-hidden select-none"
+      className="w-full sm:w-96 flex-shrink-0 bg-slate-900 border-r border-slate-800 flex flex-col h-full overflow-hidden select-none"
     >
       {/* Brand Header */}
       <div className="p-4 pb-2 flex-shrink-0 border-b border-slate-800/80 bg-slate-950/40">
@@ -1048,7 +1086,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Workspace Section Switcher: Salón vs Depósito */}
-      <div className="p-2 bg-slate-950/90 border-b border-slate-800">
+      <div className="p-2 bg-slate-950/90 border-b border-slate-800 flex-shrink-0">
         <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-900 rounded-xl border border-slate-800">
           <button
             onClick={() => {
@@ -1082,35 +1120,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
-      {/* Main Tab Navigation Bar */}
-      <div className="flex border-b border-slate-800 flex-shrink-0 bg-slate-950/70 overflow-x-auto scrollbar-none">
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-          const isActive = 
-            activeTab === tab.id ||
-            (tab.id === 'salon-espacio' && activeTab === 'deposito') ||
-            (tab.id === 'deposito-espacio' && activeTab === 'deposito') ||
-            (tab.id === 'salon-obstaculos' && activeTab === 'obstaculos') ||
-            (tab.id === 'deposito-obstaculos' && activeTab === 'obstaculos') ||
-            (tab.id === 'racks-livianos' && activeTab === 'miniracks');
-
-          return (
-            <button
-              key={tab.id}
-              onClick={() => onTabChange(tab.id)}
-              className={`flex-1 min-w-[68px] py-2.5 px-1.5 flex flex-col items-center gap-1 text-[11px] font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-                isActive
-                  ? isSalon 
-                    ? 'border-rose-500 text-slate-100 bg-slate-800/60'
-                    : 'border-blue-500 text-slate-100 bg-slate-800/60'
-                  : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/20'
-              }`}
-            >
-              <Icon className={`w-4 h-4 ${isActive ? tab.color : 'text-slate-400'}`} />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
+      {/* Main Tab Navigation Bar: 2 Renglones / 2 Rows (100% visible, sin desborde) */}
+      <div className="p-1.5 bg-slate-950/95 border-b border-slate-800 space-y-1 flex-shrink-0">
+        {/* Renglón 1 */}
+        <div className={`grid ${isSalon ? 'grid-cols-5' : 'grid-cols-4'} gap-1`}>
+          {tabsRow1.map(renderTabButton)}
+        </div>
+        {/* Renglón 2 */}
+        <div className={`grid ${isSalon ? 'grid-cols-4' : 'grid-cols-3'} gap-1`}>
+          {tabsRow2.map(renderTabButton)}
+        </div>
       </div>
 
       {/* Tab Panels Body Scroll */}

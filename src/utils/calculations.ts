@@ -20,7 +20,7 @@ export function snap10(v: number): number {
   return Math.round(v * 10) / 10;
 }
 
-export function rectsOverlap(a: Bounds3D, b: Bounds3D, eps = 1e-4): boolean {
+export function rectsOverlap(a: Bounds3D, b: Bounds3D, eps = 0.02): boolean {
   return a.x0 < b.x1 - eps && a.x1 > b.x0 + eps && a.z0 < b.z1 - eps && a.z1 > b.z0 + eps;
 }
 
@@ -40,15 +40,17 @@ export function hasCollision(bounds: Bounds3D, colliders: ColliderItem[]): boole
 
 // ── Bounds for Salón Elements ──
 export function getPunteraBounds(p: PunteraGondola): Bounds3D {
+  const pW = p.width || 0.9;
+  const pD = p.depth || 0.45;
   const isRot = p.rotation === 90 || p.rotation === 270;
-  const w = isRot ? p.depth : p.width;
-  const d = isRot ? p.width : p.depth;
+  const w = isRot ? pD : pW;
+  const d = isRot ? pW : pD;
   return {
     x0: p.x,
     x1: p.x + w,
     z0: p.z,
     z1: p.z + d,
-    h: p.height,
+    h: p.height || 1.6,
   };
 }
 
@@ -158,6 +160,37 @@ export function tryMoveWithConstraints(
     return { x: candX, z: curZ, collided: true };
   }
 
+  // If candX collided, attempt to clamp to nearest collider boundary along X
+  let bestX = curX;
+  if (candX > curX) {
+    // Moving positive X: find nearest collider on the right
+    let minX1 = candX;
+    colliders.forEach((c) => {
+      const zOverlap = !(curZ + depth <= c.bounds.z0 || curZ >= c.bounds.z1);
+      if (zOverlap && c.bounds.x0 >= curX + width - 0.01 && c.bounds.x0 < minX1 + width) {
+        minX1 = Math.min(minX1, c.bounds.x0 - width);
+      }
+    });
+    if (minX1 > curX) bestX = Number(minX1.toFixed(2));
+  } else if (candX < curX) {
+    // Moving negative X: find nearest collider on the left
+    let maxX0 = candX;
+    colliders.forEach((c) => {
+      const zOverlap = !(curZ + depth <= c.bounds.z0 || curZ >= c.bounds.z1);
+      if (zOverlap && c.bounds.x1 <= curX + 0.01 && c.bounds.x1 > maxX0) {
+        maxX0 = Math.max(maxX0, c.bounds.x1);
+      }
+    });
+    if (maxX0 < curX) bestX = Number(maxX0.toFixed(2));
+  }
+
+  if (bestX !== curX) {
+    const testBounds: Bounds3D = { x0: bestX, x1: bestX + width, z0: curZ, z1: curZ + depth };
+    if (isWithinWarehouse(testBounds, warehouse) && !hasCollision(testBounds, colliders)) {
+      return { x: bestX, z: curZ, collided: true };
+    }
+  }
+
   // Attempt sliding along Z axis only
   const slideZBounds: Bounds3D = {
     x0: curX,
@@ -167,6 +200,35 @@ export function tryMoveWithConstraints(
   };
   if (isWithinWarehouse(slideZBounds, warehouse) && !hasCollision(slideZBounds, colliders)) {
     return { x: curX, z: candZ, collided: true };
+  }
+
+  // If candZ collided, attempt to clamp to nearest collider boundary along Z
+  let bestZ = curZ;
+  if (candZ > curZ) {
+    let minZ1 = candZ;
+    colliders.forEach((c) => {
+      const xOverlap = !(curX + width <= c.bounds.x0 || curX >= c.bounds.x1);
+      if (xOverlap && c.bounds.z0 >= curZ + depth - 0.01 && c.bounds.z0 < minZ1 + depth) {
+        minZ1 = Math.min(minZ1, c.bounds.z0 - depth);
+      }
+    });
+    if (minZ1 > curZ) bestZ = Number(minZ1.toFixed(2));
+  } else if (candZ < curZ) {
+    let maxZ0 = candZ;
+    colliders.forEach((c) => {
+      const xOverlap = !(curX + width <= c.bounds.x0 || curX >= c.bounds.x1);
+      if (xOverlap && c.bounds.z1 <= curZ + 0.01 && c.bounds.z1 > maxZ0) {
+        maxZ0 = Math.max(maxZ0, c.bounds.z1);
+      }
+    });
+    if (maxZ0 < curZ) bestZ = Number(maxZ0.toFixed(2));
+  }
+
+  if (bestZ !== curZ) {
+    const testBounds: Bounds3D = { x0: curX, x1: curX + width, z0: bestZ, z1: bestZ + depth };
+    if (isWithinWarehouse(testBounds, warehouse) && !hasCollision(testBounds, colliders)) {
+      return { x: curX, z: bestZ, collided: true };
+    }
   }
 
   // Completely blocked by collision or boundary - keep current valid position
@@ -313,11 +375,20 @@ export function getAllColliders(
 
     (state.gondolaCentral?.lines || []).forEach((gcl, m) => {
       if (ignoreType === 'gondolaCentral' && ignoreIdx === m) return;
+      // If moving a puntera attached to this gondola line, ignore collision
+      if (ignoreType === 'puntera' && ignoreIdx !== null && ignoreIdx !== undefined) {
+        const p = state.punteras?.[ignoreIdx];
+        if (p && p.attachedCentralIdx === m) return;
+      }
       boxes.push({ type: 'gondolaCentral', idx: m, bounds: getGondolaCentralLineBounds(gcl, state.gondolaCentral.depth) });
     });
 
     (state.punteras || []).forEach((p, idx) => {
       if (ignoreType === 'puntera' && ignoreIdx === idx) return;
+      // If moving a gondola line that this puntera is attached to, ignore collision
+      if (ignoreType === 'gondolaCentral' && ignoreIdx !== null && ignoreIdx !== undefined) {
+        if (p.attachedCentralIdx === ignoreIdx) return;
+      }
       boxes.push({ type: 'puntera', idx, bounds: getPunteraBounds(p) });
     });
 
@@ -643,3 +714,49 @@ export function calculateSummary(state: AppState): MaterialsSummary {
     enclosingDepth: maxZ,
   };
 }
+
+export function getAttachedPunteraPosition(
+  gcline: GondolaCentralLine,
+  pWidth: number,
+  pDepth: number,
+  end: 'head' | 'tail' = 'head',
+  defaultDepth = 0.47
+): { x: number; z: number; rotation: number } {
+  const b = getGondolaCentralLineBounds(gcline, defaultDepth);
+  const rot = ((gcline.rotation || 0) % 360 + 360) % 360;
+
+  if (rot === 0 || rot === 180) {
+    // Gondola runs horizontally along X axis
+    const centerZ = (b.z0 + b.z1) / 2;
+    if (end === 'head') {
+      return {
+        x: Number(b.x1.toFixed(2)),
+        z: Number((centerZ - pWidth / 2).toFixed(2)),
+        rotation: 90,
+      };
+    } else {
+      return {
+        x: Math.max(0, Number((b.x0 - pDepth).toFixed(2))),
+        z: Number((centerZ - pWidth / 2).toFixed(2)),
+        rotation: 270,
+      };
+    }
+  } else {
+    // Gondola runs vertically along Z axis
+    const centerX = (b.x0 + b.x1) / 2;
+    if (end === 'head') {
+      return {
+        x: Number((centerX - pWidth / 2).toFixed(2)),
+        z: Number(b.z1.toFixed(2)),
+        rotation: 0,
+      };
+    } else {
+      return {
+        x: Number((centerX - pWidth / 2).toFixed(2)),
+        z: Math.max(0, Number((b.z0 - pDepth).toFixed(2))),
+        rotation: 180,
+      };
+    }
+  }
+}
+

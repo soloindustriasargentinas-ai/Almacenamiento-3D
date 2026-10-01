@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AppState, PunteraGondola, SelectionState } from '../../types';
-import { findOpenPlacementSpot, getGondolaCentralLineBounds, snap10 } from '../../utils/calculations';
-import { Package, Plus, RotateCw, Trash2, Link, Sparkles } from 'lucide-react';
+import { findOpenPlacementSpot, getAttachedPunteraPosition, snap10 } from '../../utils/calculations';
+import { Package, Plus, RotateCw, Trash2, Link, Sparkles, Check, Unlink } from 'lucide-react';
 
 interface PunterasTabProps {
   state: AppState;
@@ -21,7 +21,7 @@ export const PunterasTab: React.FC<PunterasTabProps> = ({
   const [newDepth, setNewDepth] = useState<number>(0.38);
   const [newShelves, setNewShelves] = useState<number>(4);
 
-  const addPuntera = (attachedIdx?: number) => {
+  const addPuntera = (attachedIdx?: number, end: 'head' | 'tail' = 'head') => {
     onUpdateState((prev) => {
       let posX = 1.0;
       let posZ = 1.0;
@@ -29,16 +29,10 @@ export const PunterasTab: React.FC<PunterasTabProps> = ({
 
       if (attachedIdx !== undefined && prev.gondolaCentral?.lines?.[attachedIdx]) {
         const cLine = prev.gondolaCentral.lines[attachedIdx];
-        const b = getGondolaCentralLineBounds(cLine, prev.gondolaCentral.depth);
-        if (cLine.rotation === 0 || cLine.rotation === 180) {
-          posX = snap10(b.x1 + 0.05);
-          posZ = snap10((b.z0 + b.z1) / 2 - newWidth / 2);
-          rot = 90;
-        } else {
-          posX = snap10((b.x0 + b.x1) / 2 - newWidth / 2);
-          posZ = snap10(b.z1 + 0.05);
-          rot = 0;
-        }
+        const pos = getAttachedPunteraPosition(cLine, newWidth, newDepth, end, prev.gondolaCentral.depth);
+        posX = pos.x;
+        posZ = pos.z;
+        rot = pos.rotation;
       } else {
         const spot = findOpenPlacementSpot(prev, newWidth, newDepth);
         posX = spot.x;
@@ -58,6 +52,41 @@ export const PunterasTab: React.FC<PunterasTabProps> = ({
       };
 
       const punteras = [...(prev.punteras || []), item];
+      return { ...prev, punteras };
+    });
+  };
+
+  const centerPunteraWithGondola = (pIdx: number, centralIdx: number, end: 'head' | 'tail' = 'head') => {
+    onUpdateState((prev) => {
+      const punteras = [...(prev.punteras || [])];
+      const p = punteras[pIdx];
+      const cLine = prev.gondolaCentral?.lines?.[centralIdx];
+      if (!p || !cLine) return prev;
+
+      const pos = getAttachedPunteraPosition(
+        cLine,
+        p.width || 0.90,
+        p.depth || 0.38,
+        end,
+        prev.gondolaCentral.depth
+      );
+
+      punteras[pIdx] = {
+        ...p,
+        x: pos.x,
+        z: pos.z,
+        rotation: pos.rotation,
+        attachedCentralIdx: centralIdx,
+      };
+      return { ...prev, punteras };
+    });
+  };
+
+  const detachPuntera = (pIdx: number) => {
+    onUpdateState((prev) => {
+      const punteras = [...(prev.punteras || [])];
+      if (!punteras[pIdx]) return prev;
+      punteras[pIdx] = { ...punteras[pIdx], attachedCentralIdx: null };
       return { ...prev, punteras };
     });
   };
@@ -188,16 +217,30 @@ export const PunterasTab: React.FC<PunterasTabProps> = ({
             <Link className="w-3.5 h-3.5 text-pink-400" />
             <span>Acoplar a Isla Central</span>
           </span>
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             {state.gondolaCentral.lines.map((cline, ci) => (
-              <button
-                key={ci}
-                onClick={() => addPuntera(ci)}
-                className="w-full py-1.5 px-2.5 bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-pink-500/40 rounded-lg text-left text-xs text-slate-300 flex items-center justify-between transition-all"
-              >
-                <span>Isla #{ci + 1} ({cline.modules.length} mód.)</span>
-                <span className="text-pink-400 text-[11px] font-bold">＋ Acoplar</span>
-              </button>
+              <div key={ci} className="p-2 bg-slate-950 rounded-xl border border-slate-800 space-y-1.5">
+                <div className="flex items-center justify-between text-xs text-slate-300 font-semibold">
+                  <span>Isla #{ci + 1} ({cline.modules.length} mód.)</span>
+                  <span className="text-[10px] text-pink-400 font-mono">
+                    {cline.rotation === 0 || cline.rotation === 180 ? 'Eje X' : 'Eje Z'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    onClick={() => addPuntera(ci, 'head')}
+                    className="py-1 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-pink-300 font-bold text-[11px] border border-pink-900/40 hover:border-pink-500/50 transition-all text-center cursor-pointer"
+                  >
+                    ＋ Cabecera Frontal
+                  </button>
+                  <button
+                    onClick={() => addPuntera(ci, 'tail')}
+                    className="py-1 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-pink-300 font-bold text-[11px] border border-pink-900/40 hover:border-pink-500/50 transition-all text-center cursor-pointer"
+                  >
+                    ＋ Cabecera Trasera
+                  </button>
+                </div>
+              </div>
             ))}
           </div>
         </div>
@@ -284,6 +327,60 @@ export const PunterasTab: React.FC<PunterasTabProps> = ({
                     </button>
                   </div>
                 </div>
+
+                {/* Centering & Docking Status */}
+                {p.attachedCentralIdx !== null && p.attachedCentralIdx !== undefined ? (
+                  <div className="mt-2 pt-2 border-t border-slate-800 flex items-center justify-between">
+                    <div className="flex items-center gap-1 text-emerald-400 text-[10px] font-bold">
+                      <Check className="w-3.5 h-3.5 shrink-0" />
+                      <span>Centrada con Isla #{p.attachedCentralIdx + 1}</span>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        detachPuntera(idx);
+                      }}
+                      className="text-[10px] text-slate-400 hover:text-slate-200 flex items-center gap-1 bg-slate-800/80 hover:bg-slate-700 px-1.5 py-0.5 rounded cursor-pointer transition-colors"
+                      title="Mover libremente sin acople rígido"
+                    >
+                      <Unlink className="w-3 h-3" />
+                      <span>Desacoplar</span>
+                    </button>
+                  </div>
+                ) : (
+                  (state.gondolaCentral?.lines?.length || 0) > 0 && isSel && (
+                    <div className="mt-2 pt-2 border-t border-slate-800">
+                      <div className="text-[10px] text-slate-400 mb-1 font-semibold flex items-center gap-1">
+                        <Link className="w-3 h-3 text-pink-400" />
+                        <span>Centrar en cabecera de isla:</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1">
+                        {state.gondolaCentral.lines.map((_, ci) => (
+                          <React.Fragment key={ci}>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                centerPunteraWithGondola(idx, ci, 'head');
+                              }}
+                              className="py-1 px-1 rounded bg-pink-950/60 hover:bg-pink-900/80 border border-pink-800/50 text-pink-200 text-[10px] font-bold text-center cursor-pointer"
+                            >
+                              Cabecera Isla #{ci + 1}
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                centerPunteraWithGondola(idx, ci, 'tail');
+                              }}
+                              className="py-1 px-1 rounded bg-pink-950/60 hover:bg-pink-900/80 border border-pink-800/50 text-pink-200 text-[10px] font-bold text-center cursor-pointer"
+                            >
+                              Dorso Isla #{ci + 1}
+                            </button>
+                          </React.Fragment>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                )}
               </div>
             );
           })

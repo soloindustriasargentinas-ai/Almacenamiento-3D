@@ -185,13 +185,14 @@ export default function App() {
     punteras: [
       {
         id: 1,
-        x: 3.1,
-        z: 4.0,
+        x: 3.04,
+        z: 4.02,
         rotation: 90,
         width: 0.90,
         height: 1.60,
         depth: 0.38,
         shelfCount: 4,
+        attachedCentralIdx: 0,
       },
     ],
     heladeras: [
@@ -375,9 +376,24 @@ export default function App() {
 
       if (newX === cur.xOff && newZ === cur.zOff) return prev;
       lines[idx] = { ...cur, xOff: newX, zOff: newZ };
+
+      const dx = newX - cur.xOff;
+      const dz = newZ - cur.zOff;
+      const punteras = (prev.punteras || []).map((p) => {
+        if (p.attachedCentralIdx === idx) {
+          return {
+            ...p,
+            x: Math.max(0, snap10(p.x + dx)),
+            z: Math.max(0, snap10(p.z + dz)),
+          };
+        }
+        return p;
+      });
+
       return {
         ...prev,
         gondolaCentral: { ...prev.gondolaCentral, lines },
+        punteras,
       };
     });
   }, []);

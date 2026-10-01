@@ -141,38 +141,38 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGoToAdmin, onGoTo3D 
       </header>
 
       {/* Hero Section */}
-      <section className="relative overflow-hidden py-20 lg:py-28">
+      <section className="relative overflow-hidden py-8 sm:py-12 lg:py-14">
         {/* Background glow effects */}
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute top-1/3 right-10 w-[400px] h-[400px] bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="text-center max-w-3xl mx-auto">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-950/80 border border-blue-700/60 text-blue-300 text-xs font-medium mb-6 backdrop-blur-sm">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-950/80 border border-blue-700/60 text-blue-300 text-xs font-medium mb-4 backdrop-blur-sm">
               <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
               <span>1 Única Suscripción Unificada: Acceso Total a Salón y Depósito</span>
             </div>
 
-            <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-white leading-tight">
+            <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-white leading-tight">
               Diseña Locales y Almacenes en <span className="bg-gradient-to-r from-rose-400 via-amber-300 to-blue-400 bg-clip-text text-transparent">3D Interactivo</span>
             </h1>
 
-            <p className="mt-6 text-lg text-slate-300 max-w-2xl mx-auto leading-relaxed">
-              La plataforma ahora se divide en <strong>2 secciones especializadas</strong> con menús de comando adaptados: <strong>Salón Comercial</strong> (góndolas, punteras, heladeras, check outs) y <strong>Depósito Industrial</strong> (racks pesados para pallets, miniracks, estanterías, portones).
+            <p className="mt-4 text-base sm:text-lg text-slate-300 max-w-2xl mx-auto leading-relaxed">
+              La plataforma se divide en <strong>2 secciones especializadas</strong> con menús de comando adaptados: <strong>Salón Comercial</strong> (góndolas, punteras, heladeras, check outs) y <strong>Depósito Industrial</strong> (racks pesados para pallets, miniracks, estanterías, portones).
             </p>
 
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-              <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-950/70 border border-rose-700/60 text-rose-200 text-xs font-semibold">
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5">
+              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-rose-950/70 border border-rose-700/60 text-rose-200 text-xs font-semibold">
                 <Store className="w-4 h-4 text-rose-400" />
                 <span>Salón: Góndolas Pared y Central, Punteras, Heladeras, Check Outs</span>
               </div>
-              <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-950/70 border border-blue-700/60 text-blue-200 text-xs font-semibold">
+              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-blue-950/70 border border-blue-700/60 text-blue-200 text-xs font-semibold">
                 <Building2 className="w-4 h-4 text-blue-400" />
                 <span>Depósito: Racks Pesados, Racks Livianos, Estanterías, Portones</span>
               </div>
             </div>
 
-            <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
+            <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
               <button
                 onClick={() => {
                   if (user) onGoToAdmin();

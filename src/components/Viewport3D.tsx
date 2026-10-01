@@ -465,10 +465,16 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       }
       gondolaParedGroupRef.current.add(gGroup);
 
-      // Upright function
+      // Upright function with realistic legs and leveling screw feet (No closed zócalo)
       const buildGUpright = (g: THREE.Group, x: number, postH: number, footD: number) => {
-        g.add(mkBox(colW, postH, colD, mats.gParedPost, x - colW / 2, 0, 0, meta));
-        g.add(mkBox(colW, 0.1, footD, mats.gParedFoot, x - colW / 2, 0, 0, meta));
+        // Vertical post column
+        g.add(mkBox(colW, postH - 0.03, colD, mats.gParedPost, x - colW / 2, 0.03, 0, meta));
+        // Column base leveling screw pad
+        g.add(mkBox(0.024, 0.03, 0.024, mats.gParedFoot, x - 0.012, 0, colD / 2 - 0.012, meta));
+        // Base foot beam (pie de apoyo)
+        g.add(mkBox(colW, 0.07, footD, mats.gParedFoot, x - colW / 2, 0.03, 0.01, meta));
+        // Front leveling foot screw under the base foot
+        g.add(mkBox(0.024, 0.03, 0.024, mats.gParedFoot, x - 0.012, 0, footD - 0.04, meta));
       };
 
       let cumX = 0;
@@ -481,26 +487,24 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
         const mH = mod.height || H;
         const sc = mod.sc || state.gondolaPared.shelfCount || 5;
 
-        // Back panel
-        gGroup.add(mkBox(mW, mH - 0.12, 0.015, mats.gParedBack, cumX, 0.12, 0.005, meta));
-        // Top crown
-        gGroup.add(mkBox(mW, 0.08, 0.15, mats.gParedShelf, cumX, mH - 0.08, 0.02, meta));
-        // Base zócalo
-        gGroup.add(mkBox(mW, 0.12, 0.01, mats.gParedZocalo, cumX, 0, mD - 0.01, meta));
-        // Base shelf
-        gGroup.add(mkBox(mW, 0.03, mD, mats.gParedShelf, cumX, 0.12, 0.01, meta));
-        // Base price tag
-        gGroup.add(mkBox(mW, 0.035, 0.006, mats.gParedPriceTag, cumX, 0.12, mD + 0.01, meta));
+        // Slotted back panel (paneles traseros)
+        gGroup.add(mkBox(mW, mH - 0.10, 0.015, mats.gParedBack, cumX, 0.10, 0.005, meta));
 
+        // Base shelf rests on foot beams at y = 0.10 (Open floor underneath, no closed zócalo)
+        gGroup.add(mkBox(mW, 0.03, mD, mats.gParedShelf, cumX, 0.10, 0.01, meta));
+        gGroup.add(mkBox(mW, 0.035, 0.008, mats.gParedPriceTag, cumX, 0.10, mD + 0.01, meta));
+
+        // Aerial shelves: top shelf sits flush at top of column (al ras superior), intermediate shelves distributed evenly
         const numAereos = Math.max(0, sc - 1);
         if (numAereos > 0) {
-          const gap = (mH - 0.35) / (numAereos + 0.5);
+          const topY = mH - 0.025;
+          const baseY = 0.10;
           for (let s = 1; s <= numAereos; s++) {
-            const y = 0.14 + s * gap;
-            gGroup.add(mkBox(mW, 0.025, mD, mats.gParedShelf, cumX, y, 0.02, meta));
-            gGroup.add(mkBox(mW, 0.035, 0.006, mats.gParedPriceTag, cumX, y, mD + 0.02, meta));
-            gGroup.add(mkBox(0.004, 0.07, mD * 0.9, mats.gParedBracket, cumX + 0.01, y - 0.05, 0.02, meta));
-            gGroup.add(mkBox(0.004, 0.07, mD * 0.9, mats.gParedBracket, cumX + mW - 0.01, y - 0.05, 0.02, meta));
+            const y = numAereos === 1 ? topY : baseY + s * ((topY - baseY) / numAereos);
+            gGroup.add(mkBox(mW, 0.025, mD, mats.gParedShelf, cumX, y, 0.015, meta));
+            gGroup.add(mkBox(mW, 0.025, 0.008, mats.gParedPriceTag, cumX, y, mD + 0.015, meta));
+            gGroup.add(mkBox(0.005, 0.07, mD * 0.9, mats.gParedBracket, cumX + 0.005, y - 0.05, 0.015, meta));
+            gGroup.add(mkBox(0.005, 0.07, mD * 0.9, mats.gParedBracket, cumX + mW - 0.01, y - 0.05, 0.015, meta));
           }
         }
 
@@ -541,8 +545,16 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       gondolaCentralGroupRef.current.add(gGroup);
 
       const buildGCUpright = (g: THREE.Group, x: number, postH: number, centerZ: number, dSideA: number, dSideB: number) => {
-        g.add(mkBox(colW, postH, colD, mats.gCentPost, x - colW / 2, 0, centerZ - colD / 2, meta));
-        g.add(mkBox(colW, 0.1, dSideA + dSideB, mats.gCentFoot, x - colW / 2, 0, centerZ - dSideB, meta));
+        // Vertical central column
+        g.add(mkBox(colW, postH - 0.03, colD, mats.gCentPost, x - colW / 2, 0.03, centerZ - colD / 2, meta));
+        // Center column leveling foot
+        g.add(mkBox(0.024, 0.03, 0.024, mats.gCentFoot, x - 0.012, 0, centerZ - 0.012, meta));
+        // Double base foot beam (pie doble faz)
+        g.add(mkBox(colW, 0.07, dSideA + dSideB, mats.gCentFoot, x - colW / 2, 0.03, centerZ - dSideB, meta));
+        // Front leveling foot screw (Side A)
+        g.add(mkBox(0.024, 0.03, 0.024, mats.gCentFoot, x - 0.012, 0, centerZ + dSideA - 0.04, meta));
+        // Rear leveling foot screw (Side B)
+        g.add(mkBox(0.024, 0.03, 0.024, mats.gCentFoot, x - 0.012, 0, centerZ - dSideB + 0.016, meta));
       };
 
       let cumX = 0;
@@ -558,40 +570,40 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
         const scB = mod.scB || state.gondolaCentral.shelfCount || 3;
         const centerZ = sideB;
 
-        // Central divider panel
-        gGroup.add(mkBox(mW, mH - 0.12, 0.02, mats.gCentBack, cumX, 0.12, centerZ - 0.01, meta));
-        // Top crown cap
-        gGroup.add(mkBox(mW, 0.06, 0.16, mats.gCentShelf, cumX, mH - 0.06, centerZ - 0.08, meta));
+        // Central divider panel (panel central ranurado)
+        gGroup.add(mkBox(mW, mH - 0.10, 0.018, mats.gCentBack, cumX, 0.10, centerZ - 0.009, meta));
 
         // Side A (+Z)
-        gGroup.add(mkBox(mW, 0.12, 0.01, mats.gCentZocalo, cumX, 0, centerZ + sideA - 0.01, meta));
-        gGroup.add(mkBox(mW, 0.03, sideA, mats.gCentShelf, cumX, 0.12, centerZ, meta));
-        gGroup.add(mkBox(mW, 0.035, 0.006, mats.gCentPriceTagA, cumX, 0.12, centerZ + sideA, meta));
+        // Base shelf rests on feet at y = 0.10 (Open floor underneath, no closed zócalo)
+        gGroup.add(mkBox(mW, 0.03, sideA, mats.gCentShelf, cumX, 0.10, centerZ, meta));
+        gGroup.add(mkBox(mW, 0.035, 0.008, mats.gCentPriceTagA, cumX, 0.10, centerZ + sideA, meta));
         const numAereosA = Math.max(0, scA - 1);
         if (numAereosA > 0) {
-          const gapA = (mH - 0.3) / (scA - 0.5);
+          const topYA = mH - 0.025;
+          const baseYA = 0.10;
           for (let sa = 1; sa <= numAereosA; sa++) {
-            const ya = 0.14 + sa * gapA;
+            const ya = numAereosA === 1 ? topYA : baseYA + sa * ((topYA - baseYA) / numAereosA);
             gGroup.add(mkBox(mW, 0.025, sideA, mats.gCentShelf, cumX, ya, centerZ, meta));
-            gGroup.add(mkBox(mW, 0.035, 0.006, mats.gCentPriceTagA, cumX, ya, centerZ + sideA, meta));
-            gGroup.add(mkBox(0.004, 0.07, sideA * 0.9, mats.gCentBracket, cumX + 0.01, ya - 0.05, centerZ + 0.02, meta));
-            gGroup.add(mkBox(0.004, 0.07, sideA * 0.9, mats.gCentBracket, cumX + mW - 0.01, ya - 0.05, centerZ + 0.02, meta));
+            gGroup.add(mkBox(mW, 0.025, 0.008, mats.gCentPriceTagA, cumX, ya, centerZ + sideA, meta));
+            gGroup.add(mkBox(0.005, 0.07, sideA * 0.9, mats.gCentBracket, cumX + 0.005, ya - 0.05, centerZ + 0.01, meta));
+            gGroup.add(mkBox(0.005, 0.07, sideA * 0.9, mats.gCentBracket, cumX + mW - 0.009, ya - 0.05, centerZ + 0.01, meta));
           }
         }
 
         // Side B (-Z)
-        gGroup.add(mkBox(mW, 0.12, 0.01, mats.gCentZocalo, cumX, 0, centerZ - sideB, meta));
-        gGroup.add(mkBox(mW, 0.03, sideB, mats.gCentShelf, cumX, 0.12, centerZ - sideB, meta));
-        gGroup.add(mkBox(mW, 0.035, 0.006, mats.gCentPriceTagB, cumX, 0.12, centerZ - sideB - 0.006, meta));
+        // Base shelf rests on feet at y = 0.10 (Open floor underneath, no closed zócalo)
+        gGroup.add(mkBox(mW, 0.03, sideB, mats.gCentShelf, cumX, 0.10, centerZ - sideB, meta));
+        gGroup.add(mkBox(mW, 0.035, 0.008, mats.gCentPriceTagB, cumX, 0.10, centerZ - sideB - 0.008, meta));
         const numAereosB = Math.max(0, scB - 1);
         if (numAereosB > 0) {
-          const gapB = (mH - 0.3) / (scB - 0.5);
+          const topYB = mH - 0.025;
+          const baseYB = 0.10;
           for (let sb = 1; sb <= numAereosB; sb++) {
-            const yb = 0.14 + sb * gapB;
+            const yb = numAereosB === 1 ? topYB : baseYB + sb * ((topYB - baseYB) / numAereosB);
             gGroup.add(mkBox(mW, 0.025, sideB, mats.gCentShelf, cumX, yb, centerZ - sideB, meta));
-            gGroup.add(mkBox(mW, 0.035, 0.006, mats.gCentPriceTagB, cumX, yb, centerZ - sideB - 0.006, meta));
-            gGroup.add(mkBox(0.004, 0.07, sideB * 0.9, mats.gCentBracket, cumX + 0.01, yb - 0.05, centerZ - sideB, meta));
-            gGroup.add(mkBox(0.004, 0.07, sideB * 0.9, mats.gCentBracket, cumX + mW - 0.01, yb - 0.05, centerZ - sideB, meta));
+            gGroup.add(mkBox(mW, 0.025, 0.008, mats.gCentPriceTagB, cumX, yb, centerZ - sideB - 0.008, meta));
+            gGroup.add(mkBox(0.005, 0.07, sideB * 0.9, mats.gCentBracket, cumX + 0.005, yb - 0.05, centerZ - sideB, meta));
+            gGroup.add(mkBox(0.005, 0.07, sideB * 0.9, mats.gCentBracket, cumX + mW - 0.009, yb - 0.05, centerZ - sideB, meta));
           }
         }
 
@@ -670,30 +682,64 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     (state.punteras || []).forEach((p, idx) => {
       const g = new THREE.Group();
       const rot = ((p.rotation || 0) % 360 + 360) % 360;
-      g.position.set(p.x, 0, p.z);
-      g.rotation.y = (rot * Math.PI) / 180;
-      punteraGroupRef.current.add(g);
-
-      const meta = { type: 'puntera', idx };
       const W = p.width || 0.9;
-      const D = p.depth || 0.38;
+      const D = p.depth || 0.45;
       const H = p.height || 1.6;
       const sc = p.shelfCount || 4;
 
-      g.add(mkBox(0.05, H, 0.06, mats.gCentPost, W / 2 - 0.025, 0, 0, meta));
-      g.add(mkBox(W, H - 0.15, 0.018, mats.gCentBack, 0, 0.15, 0.02, meta));
-      g.add(mkBox(W, 0.14, 0.02, mats.gCentZocalo, 0, 0, D - 0.02, meta));
-      g.add(mkBox(W, 0.03, D, mats.gCentShelf, 0, 0.12, 0, meta));
-      g.add(mkBox(W, 0.025, 0.015, mats.gCentPriceTagA, 0, 0.13, D, meta));
+      if (rot === 0) {
+        g.position.set(p.x, 0, p.z);
+        g.rotation.y = 0;
+      } else if (rot === 90) {
+        g.position.set(p.x, 0, p.z + W);
+        g.rotation.y = Math.PI / 2;
+      } else if (rot === 180) {
+        g.position.set(p.x + W, 0, p.z + D);
+        g.rotation.y = Math.PI;
+      } else if (rot === 270) {
+        g.position.set(p.x + D, 0, p.z);
+        g.rotation.y = -Math.PI / 2;
+      }
+      punteraGroupRef.current.add(g);
 
-      const step = (H - 0.35) / Math.max(1, sc - 1);
-      for (let i = 1; i < sc; i++) {
-        const sy = 0.15 + i * step;
-        const sDepth = Math.max(0.28, D - 0.04);
-        g.add(mkBox(W, 0.022, sDepth, mats.gCentShelf, 0, sy, 0.02, meta));
-        g.add(mkBox(W, 0.025, 0.015, mats.gCentPriceTagA, 0, sy + 0.01, sDepth + 0.02, meta));
-        g.add(mkBox(0.02, 0.05, sDepth, mats.gCentBracket, 0.05, sy - 0.04, 0.02, meta));
-        g.add(mkBox(0.02, 0.05, sDepth, mats.gCentBracket, W - 0.07, sy - 0.04, 0.02, meta));
+      const meta = { type: 'puntera', idx };
+
+      // Uprights with realistic legs and leveling screw feet (Open underneath, no closed zócalo)
+      const colW = 0.04;
+      const colD = 0.06;
+      // Center upright column
+      g.add(mkBox(colW, H - 0.03, colD, mats.gCentPost, W / 2 - colW / 2, 0.03, 0.01, meta));
+      g.add(mkBox(0.024, 0.03, 0.024, mats.gCentFoot, W / 2 - 0.012, 0, 0.02, meta));
+      // Base foot beam extending forward along Z
+      g.add(mkBox(colW, 0.07, D, mats.gCentFoot, W / 2 - colW / 2, 0.03, 0.01, meta));
+      g.add(mkBox(0.024, 0.03, 0.024, mats.gCentFoot, W / 2 - 0.012, 0, D - 0.04, meta));
+
+      // Side foot beams & posts
+      g.add(mkBox(0.03, H - 0.03, 0.04, mats.gCentPost, 0.02, 0.03, 0.01, meta));
+      g.add(mkBox(0.03, H - 0.03, 0.04, mats.gCentPost, W - 0.05, 0.03, 0.01, meta));
+      g.add(mkBox(0.03, 0.07, D, mats.gCentFoot, 0.02, 0.03, 0.01, meta));
+      g.add(mkBox(0.03, 0.07, D, mats.gCentFoot, W - 0.05, 0.03, 0.01, meta));
+
+      // Slotted back panel
+      g.add(mkBox(W, H - 0.10, 0.018, mats.gCentBack, 0, 0.10, 0.015, meta));
+
+      // Base shelf at y = 0.10 (Open floor underneath, NO closed zócalo)
+      g.add(mkBox(W, 0.03, D, mats.gCentShelf, 0, 0.10, 0.01, meta));
+      g.add(mkBox(W, 0.035, 0.008, mats.gCentPriceTagA, 0, 0.10, D + 0.01, meta));
+
+      // Aerial shelves: top shelf sits flush at H - 0.025 (al ras superior), intermediate shelves distributed evenly
+      const numAereos = Math.max(0, sc - 1);
+      if (numAereos > 0) {
+        const topY = H - 0.025;
+        const baseY = 0.10;
+        for (let s = 1; s <= numAereos; s++) {
+          const sy = numAereos === 1 ? topY : baseY + s * ((topY - baseY) / numAereos);
+          const sDepth = Math.max(0.28, D - 0.03);
+          g.add(mkBox(W, 0.025, sDepth, mats.gCentShelf, 0, sy, 0.015, meta));
+          g.add(mkBox(W, 0.025, 0.008, mats.gCentPriceTagA, 0, sy, sDepth + 0.015, meta));
+          g.add(mkBox(0.005, 0.07, sDepth * 0.9, mats.gCentBracket, 0.02, sy - 0.05, 0.015, meta));
+          g.add(mkBox(0.005, 0.07, sDepth * 0.9, mats.gCentBracket, W - 0.025, sy - 0.05, 0.015, meta));
+        }
       }
     });
 
@@ -702,14 +748,26 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     (state.heladeras || []).forEach((h, idx) => {
       const g = new THREE.Group();
       const rot = ((h.rotation || 0) % 360 + 360) % 360;
-      g.position.set(h.x, 0, h.z);
-      g.rotation.y = (rot * Math.PI) / 180;
-      heladeraGroupRef.current.add(g);
-
-      const meta = { type: 'heladera', idx };
       const W = h.width || 1.8;
       const D = h.depth || 0.85;
       const H = h.height || 2.0;
+
+      if (rot === 0) {
+        g.position.set(h.x, 0, h.z);
+        g.rotation.y = 0;
+      } else if (rot === 90) {
+        g.position.set(h.x, 0, h.z + W);
+        g.rotation.y = Math.PI / 2;
+      } else if (rot === 180) {
+        g.position.set(h.x + W, 0, h.z + D);
+        g.rotation.y = Math.PI;
+      } else if (rot === 270) {
+        g.position.set(h.x + D, 0, h.z);
+        g.rotation.y = -Math.PI / 2;
+      }
+      heladeraGroupRef.current.add(g);
+
+      const meta = { type: 'heladera', idx };
       const bodyMat = h.color === 'negro' ? mats.refrigBodyBlack : h.color === 'inox' ? mats.refrigBodyInox : mats.refrigBodyWhite;
 
       g.add(mkBox(W, 0.28, D, mats.refrigBodyBlack, 0, 0, 0, meta));
@@ -742,14 +800,26 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     (state.checkouts || []).forEach((c, idx) => {
       const g = new THREE.Group();
       const rot = ((c.rotation || 0) % 360 + 360) % 360;
-      g.position.set(c.x, 0, c.z);
-      g.rotation.y = (rot * Math.PI) / 180;
-      checkoutGroupRef.current.add(g);
-
-      const meta = { type: 'checkout', idx };
       const L = c.length || 2.2;
       const W = c.width || 1.1;
       const H = c.height || 0.88;
+
+      if (rot === 0) {
+        g.position.set(c.x, 0, c.z);
+        g.rotation.y = 0;
+      } else if (rot === 90) {
+        g.position.set(c.x, 0, c.z + L);
+        g.rotation.y = Math.PI / 2;
+      } else if (rot === 180) {
+        g.position.set(c.x + L, 0, c.z + W);
+        g.rotation.y = Math.PI;
+      } else if (rot === 270) {
+        g.position.set(c.x + W, 0, c.z);
+        g.rotation.y = -Math.PI / 2;
+      }
+      checkoutGroupRef.current.add(g);
+
+      const meta = { type: 'checkout', idx };
 
       g.add(mkBox(L, H - 0.05, 0.65, mats.checkoutBody, 0, 0, 0, meta));
       g.add(mkBox(L * 0.45, 0.08, W - 0.65, mats.checkoutBody, L * 0.25, 0, 0.65, meta));
@@ -766,13 +836,26 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     (state.doors || []).forEach((door, idx) => {
       const g = new THREE.Group();
       const rot = ((door.rotation || 0) % 360 + 360) % 360;
-      g.position.set(door.x, 0, door.z);
-      g.rotation.y = (rot * Math.PI) / 180;
+      const W = door.width || (door.section === 'deposito' ? 3.0 : 2.0);
+      const H = door.height || (door.section === 'deposito' ? 3.5 : 2.4);
+      const dThick = 0.25;
+
+      if (rot === 0) {
+        g.position.set(door.x, 0, door.z);
+        g.rotation.y = 0;
+      } else if (rot === 90) {
+        g.position.set(door.x, 0, door.z + W);
+        g.rotation.y = Math.PI / 2;
+      } else if (rot === 180) {
+        g.position.set(door.x + W, 0, door.z + dThick);
+        g.rotation.y = Math.PI;
+      } else if (rot === 270) {
+        g.position.set(door.x + dThick, 0, door.z);
+        g.rotation.y = -Math.PI / 2;
+      }
       doorGroupRef.current.add(g);
 
       const meta = { type: 'door', idx };
-      const W = door.width || (door.section === 'deposito' ? 3.0 : 2.0);
-      const H = door.height || (door.section === 'deposito' ? 3.5 : 2.4);
 
       if (door.section === 'deposito' || door.type === 'porton_industrial') {
         g.add(mkBox(0.12, H, 0.12, mats.doorFrame, 0, 0, 0, meta));
@@ -916,45 +999,45 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
 
     if (selection.type === 'minirack' && state.lines[selection.idx]) {
       const b = getMinirackLineBounds(state.lines[selection.idx], state.depth);
-      mn = new THREE.Vector3(b.x0 - 0.05, 0, b.z0 - 0.05);
-      mx = new THREE.Vector3(b.x1 + 0.05, state.height + 0.05, b.z1 + 0.05);
+      mn = new THREE.Vector3(b.x0, 0, b.z0);
+      mx = new THREE.Vector3(b.x1, state.height, b.z1);
     } else if (selection.type === 'estanteria' && state.shelfLines[selection.idx]) {
       const b = getShelfLineBounds(state.shelfLines[selection.idx], state.shelfDepth);
-      mn = new THREE.Vector3(b.x0 - 0.05, 0, b.z0 - 0.05);
-      mx = new THREE.Vector3(b.x1 + 0.05, state.shelfHeight + 0.05, b.z1 + 0.05);
+      mn = new THREE.Vector3(b.x0, 0, b.z0);
+      mx = new THREE.Vector3(b.x1, state.shelfHeight, b.z1);
     } else if (selection.type === 'gondolaPared' && state.gondolaPared.lines[selection.idx]) {
       const b = getGondolaParedLineBounds(state.gondolaPared.lines[selection.idx], state.gondolaPared.depth);
-      mn = new THREE.Vector3(b.x0 - 0.05, 0, b.z0 - 0.05);
-      mx = new THREE.Vector3(b.x1 + 0.05, (state.gondolaPared.height || 2.0) + 0.05, b.z1 + 0.05);
+      mn = new THREE.Vector3(b.x0, 0, b.z0);
+      mx = new THREE.Vector3(b.x1, state.gondolaPared.height || 2.0, b.z1);
     } else if (selection.type === 'gondolaCentral' && state.gondolaCentral.lines[selection.idx]) {
       const b = getGondolaCentralLineBounds(state.gondolaCentral.lines[selection.idx], state.gondolaCentral.depth);
       const h = state.gondolaCentral.lines[selection.idx].height || state.gondolaCentral.height || 1.6;
-      mn = new THREE.Vector3(b.x0 - 0.05, 0, b.z0 - 0.05);
-      mx = new THREE.Vector3(b.x1 + 0.05, h + 0.05, b.z1 + 0.05);
+      mn = new THREE.Vector3(b.x0, 0, b.z0);
+      mx = new THREE.Vector3(b.x1, h, b.z1);
     } else if (selection.type === 'obstacle' && state.obstacles[selection.idx]) {
       const b = getObstacleBounds(state.obstacles[selection.idx], state.warehouse.height);
-      mn = new THREE.Vector3(b.x0 - 0.05, 0, b.z0 - 0.05);
-      mx = new THREE.Vector3(b.x1 + 0.05, (b.h || 3.0) + 0.05, b.z1 + 0.05);
+      mn = new THREE.Vector3(b.x0, 0, b.z0);
+      mx = new THREE.Vector3(b.x1, b.h || 3.0, b.z1);
     } else if (selection.type === 'puntera' && state.punteras?.[selection.idx]) {
       const b = getPunteraBounds(state.punteras[selection.idx]);
-      mn = new THREE.Vector3(b.x0 - 0.05, 0, b.z0 - 0.05);
-      mx = new THREE.Vector3(b.x1 + 0.05, (b.h || 1.6) + 0.05, b.z1 + 0.05);
+      mn = new THREE.Vector3(b.x0, 0, b.z0);
+      mx = new THREE.Vector3(b.x1, b.h || 1.6, b.z1);
     } else if (selection.type === 'heladera' && state.heladeras?.[selection.idx]) {
       const b = getHeladeraBounds(state.heladeras[selection.idx]);
-      mn = new THREE.Vector3(b.x0 - 0.05, 0, b.z0 - 0.05);
-      mx = new THREE.Vector3(b.x1 + 0.05, (b.h || 2.0) + 0.05, b.z1 + 0.05);
+      mn = new THREE.Vector3(b.x0, 0, b.z0);
+      mx = new THREE.Vector3(b.x1, b.h || 2.0, b.z1);
     } else if (selection.type === 'checkout' && state.checkouts?.[selection.idx]) {
       const b = getCheckoutBounds(state.checkouts[selection.idx]);
-      mn = new THREE.Vector3(b.x0 - 0.05, 0, b.z0 - 0.05);
-      mx = new THREE.Vector3(b.x1 + 0.05, (b.h || 0.88) + 0.05, b.z1 + 0.05);
+      mn = new THREE.Vector3(b.x0, 0, b.z0);
+      mx = new THREE.Vector3(b.x1, b.h || 0.88, b.z1);
     } else if (selection.type === 'door' && state.doors?.[selection.idx]) {
       const b = getDoorBounds(state.doors[selection.idx]);
-      mn = new THREE.Vector3(b.x0 - 0.05, 0, b.z0 - 0.05);
-      mx = new THREE.Vector3(b.x1 + 0.05, (b.h || 2.4) + 0.05, b.z1 + 0.05);
+      mn = new THREE.Vector3(b.x0, 0, b.z0);
+      mx = new THREE.Vector3(b.x1, b.h || 2.4, b.z1);
     } else if (selection.type === 'heavyRack' && state.heavyRacks?.lines?.[selection.idx]) {
       const b = getHeavyRackLineBounds(state.heavyRacks.lines[selection.idx], state.heavyRacks.depth);
-      mn = new THREE.Vector3(b.x0 - 0.05, 0, b.z0 - 0.05);
-      mx = new THREE.Vector3(b.x1 + 0.05, (state.heavyRacks.height || 4.5) + 0.05, b.z1 + 0.05);
+      mn = new THREE.Vector3(b.x0, 0, b.z0);
+      mx = new THREE.Vector3(b.x1, state.heavyRacks.height || 4.5, b.z1);
     }
 
     if (mn && mx) {
