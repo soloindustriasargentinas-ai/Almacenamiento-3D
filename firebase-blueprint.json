@@ -1,0 +1,163 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with authentication and subscription details",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Firebase Authentication UID"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "User email address"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User full name or display name"
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "User avatar image URL"
+        },
+        "subscriptionPlan": {
+          "type": "string",
+          "enum": ["free", "pro", "enterprise"],
+          "description": "Current subscription tier"
+        },
+        "subscriptionStatus": {
+          "type": "string",
+          "enum": ["active", "trialing", "canceled"],
+          "description": "Current subscription state"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of creation"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last update"
+        }
+      },
+      "required": ["id", "email", "subscriptionPlan", "subscriptionStatus"]
+    },
+    "Client": {
+      "title": "Client",
+      "description": "Client company or individual contact for commercial layout projects",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique client ID"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Owner user UID"
+        },
+        "name": {
+          "type": "string",
+          "description": "Client contact or business name",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "company": {
+          "type": "string",
+          "description": "Company or commercial brand",
+          "maxLength": 120
+        },
+        "email": {
+          "type": "string",
+          "description": "Client email"
+        },
+        "phone": {
+          "type": "string",
+          "description": "Client phone or WhatsApp"
+        },
+        "address": {
+          "type": "string",
+          "description": "Warehouse or store physical address"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Additional notes"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of creation"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last update"
+        }
+      },
+      "required": ["id", "userId", "name"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "3D Warehouse layout configuration project with racks, gondolas and warehouse specifications",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique project ID"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Owner user UID"
+        },
+        "clientId": {
+          "type": "string",
+          "description": "Optional assigned client ID"
+        },
+        "clientName": {
+          "type": "string",
+          "description": "Client name denormalized for fast display"
+        },
+        "name": {
+          "type": "string",
+          "description": "Project title",
+          "minLength": 1,
+          "maxLength": 140
+        },
+        "description": {
+          "type": "string",
+          "description": "Project notes or specifications",
+          "maxLength": 1000
+        },
+        "warehouseState": {
+          "type": "string",
+          "description": "Serialized JSON of AppState layout"
+        },
+        "stats": {
+          "type": "object",
+          "description": "Summary counts for miniracks, shelves, gondolas and area"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of creation"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last update"
+        }
+      },
+      "required": ["id", "userId", "name", "warehouseState"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles and subscription details"
+    },
+    "/clients/{clientId}": {
+      "schema": "Client",
+      "description": "Commercial clients registered by users"
+    },
+    "/projects/{projectId}": {
+      "schema": "Project",
+      "description": "3D layout projects saved by users"
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Configurador 3D de Racks y Góndolas",
+  "description": "Configurador 3D interactivo de Miniracks, Estanterías y Góndolas comerciales de pared y centrales con cálculo estructural y visualización realista.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

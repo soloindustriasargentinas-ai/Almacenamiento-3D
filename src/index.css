@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+  
+  body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    user-select: none;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  }
+}
+
+/* Custom Slim Scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Print styling for direct PDF generation */
+@media print {
+  #sidebar,
+  #viewport-container .absolute {
+    display: none !important;
+  }
+
+  #app-root {
+    display: block !important;
+    height: auto !important;
+    background: white !important;
+    color: black !important;
+  }
+
+  #viewport-wrapper {
+    height: 100vh !important;
+    width: 100vw !important;
+  }
+
+  canvas {
+    max-height: 80vh !important;
+    object-fit: contain !important;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.15s ease-out forwards;
+}
