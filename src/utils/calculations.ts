@@ -789,3 +789,77 @@ export function getAttachedPunteraPosition(
   }
 }
 
+/**
+ * Enforces business rules for Góndolas:
+ * 1. Góndolas de pared: altura ÚNICAMENTE 2.00 metros.
+ * 2. Tanto góndolas de pared como centrales: largo de 1.00m no existe (solo 0.70m, 0.90m, 1.20m).
+ */
+export function sanitizeGondolaDimensions(st: AppState): AppState {
+  if (!st) return st;
+
+  let changed = false;
+  const updatedParedLines = (st.gondolaPared?.lines || []).map((l) => {
+    let lineChanged = false;
+    if (l.height !== 2.0) lineChanged = true;
+
+    const newMods = (l.modules || []).map((m) => {
+      let modBl = m.bl;
+      if (Math.abs(modBl - 1.0) < 0.05) {
+        modBl = 1.2;
+        lineChanged = true;
+      }
+      if (m.height !== 2.0) {
+        lineChanged = true;
+      }
+      return { ...m, bl: modBl, height: 2.0 };
+    });
+
+    if (lineChanged) {
+      changed = true;
+      return { ...l, height: 2.0, modules: newMods };
+    }
+    return l;
+  });
+
+  const updatedCentralLines = (st.gondolaCentral?.lines || []).map((l) => {
+    let lineChanged = false;
+    const newMods = (l.modules || []).map((m) => {
+      let modBl = m.bl;
+      if (Math.abs(modBl - 1.0) < 0.05) {
+        modBl = 1.2;
+        lineChanged = true;
+      }
+      return { ...m, bl: modBl };
+    });
+
+    if (lineChanged) {
+      changed = true;
+      return { ...l, modules: newMods };
+    }
+    return l;
+  });
+
+  const paredHeightMismatch = st.gondolaPared?.height !== 2.0;
+  const paredModuleLengthMismatch = Math.abs((st.gondolaPared?.moduleLength || 0) - 1.0) < 0.05;
+  const centralModuleLengthMismatch = Math.abs((st.gondolaCentral?.moduleLength || 0) - 1.0) < 0.05;
+
+  if (changed || paredHeightMismatch || paredModuleLengthMismatch || centralModuleLengthMismatch) {
+    return {
+      ...st,
+      gondolaPared: {
+        ...st.gondolaPared,
+        height: 2.0,
+        moduleLength: paredModuleLengthMismatch ? 1.2 : (st.gondolaPared?.moduleLength || 1.2),
+        lines: updatedParedLines,
+      },
+      gondolaCentral: {
+        ...st.gondolaCentral,
+        moduleLength: centralModuleLengthMismatch ? 1.2 : (st.gondolaCentral?.moduleLength || 1.2),
+        lines: updatedCentralLines,
+      },
+    };
+  }
+
+  return st;
+}
+

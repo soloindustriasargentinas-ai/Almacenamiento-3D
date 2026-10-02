@@ -71,9 +71,9 @@ export interface ShelfLine {
 
 // ── Góndolas de Pared ──
 export interface GondolaParedModule {
-  bl: number; // 0.70, 0.90, 1.00, 1.20
+  bl: number; // 0.70, 0.90, 1.20 (1.0m no existe)
   sc: number; // shelf count
-  height?: number; // 1.60, 1.75, 2.00, 2.20
+  height?: number; // 2.00m (fijo)
   depth?: number; // 0.38 or 0.47
 }
 
@@ -81,13 +81,13 @@ export interface GondolaParedLine {
   xOff: number;
   zOff: number;
   rotation: number; // 0, 90, 180, 270
-  height?: number;
+  height?: number; // 2.00m
   modules: GondolaParedModule[];
 }
 
 // ── Góndolas Centrales (Islas) ──
 export interface GondolaCentralModule {
-  bl: number; // 0.70, 0.90, 1.00, 1.20
+  bl: number; // 0.70, 0.90, 1.20 (1.0m no existe)
   height?: number; // 1.20, 1.60, 1.75, 2.00
   scA: number;
   scB: number;

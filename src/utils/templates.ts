@@ -9,16 +9,15 @@ export function createDefaultSalonState(): AppState {
       height: 2.0,
       depth: 0.47,
       shelfCount: 5,
-      moduleLength: 1.0,
+      moduleLength: 1.2,
       lines: [
         {
           xOff: 1.0,
           zOff: 0.6,
           rotation: 0,
           modules: [
-            { bl: 1.0, sc: 5, depth: 0.47 },
-            { bl: 1.0, sc: 5, depth: 0.47 },
-            { bl: 1.0, sc: 5, depth: 0.47 },
+            { bl: 1.2, sc: 5, depth: 0.47, height: 2.0 },
+            { bl: 1.2, sc: 5, depth: 0.47, height: 2.0 },
           ],
         },
       ],
@@ -28,7 +27,7 @@ export function createDefaultSalonState(): AppState {
       height: 1.6,
       depth: 0.47,
       shelfCount: 4,
-      moduleLength: 1.0,
+      moduleLength: 1.2,
       lines: [
         {
           xOff: 2.5,
@@ -37,7 +36,7 @@ export function createDefaultSalonState(): AppState {
           height: 1.6,
           modules: [
             {
-              bl: 1.0,
+              bl: 1.2,
               height: 1.6,
               scA: 4,
               scB: 4,
@@ -45,7 +44,7 @@ export function createDefaultSalonState(): AppState {
               depthB: 0.47,
             },
             {
-              bl: 1.0,
+              bl: 1.2,
               height: 1.6,
               scA: 4,
               scB: 4,
@@ -255,7 +254,7 @@ export function createDefaultDepositoState(): AppState {
       height: 2.0,
       depth: 0.47,
       shelfCount: 5,
-      moduleLength: 1.0,
+      moduleLength: 1.2,
       lines: [],
     },
 
@@ -263,7 +262,7 @@ export function createDefaultDepositoState(): AppState {
       height: 1.6,
       depth: 0.47,
       shelfCount: 4,
-      moduleLength: 1.0,
+      moduleLength: 1.2,
       lines: [],
     },
 

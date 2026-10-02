@@ -31,6 +31,7 @@ import {
   hasCollision,
   isWithinWarehouse,
   tryMoveWithConstraints,
+  sanitizeGondolaDimensions,
 } from './utils/calculations';
 import { 
   ArrowLeft, 
@@ -928,12 +929,13 @@ export default function App() {
         onOpenProjectIn3D={(proj) => {
           try {
             const parsed: AppState = JSON.parse(proj.warehouseState);
-            setState(parsed);
-            if (parsed.activeSection === 'salon') {
-              salonStateRef.current = parsed;
+            const cleanState = sanitizeGondolaDimensions(parsed);
+            setState(cleanState);
+            if (cleanState.activeSection === 'salon') {
+              salonStateRef.current = cleanState;
               setActiveTab('gondola-pared');
             } else {
-              depositoStateRef.current = parsed;
+              depositoStateRef.current = cleanState;
               setActiveTab('racks-livianos');
             }
           } catch (e) {

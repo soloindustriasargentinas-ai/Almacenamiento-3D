@@ -524,9 +524,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     onUpdateState((prev) => {
       const newLineMods = [
         {
-          bl: 1.0,
+          bl: 1.2,
           sc: prev.gondolaPared.shelfCount || 5,
-          height: prev.gondolaPared.height || 2.0,
+          height: 2.0,
           depth: prev.gondolaPared.depth || 0.47,
         },
       ];
@@ -595,9 +595,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         modules: [
           ...cur.modules,
           {
-            bl: lastMod ? lastMod.bl : 1.0,
+            bl: lastMod ? lastMod.bl : 1.2,
             sc: lastMod ? lastMod.sc : (prev.gondolaPared.shelfCount || 5),
-            height: lastMod?.height || cur.height || prev.gondolaPared.height || 2.0,
+            height: 2.0,
             depth: lastMod?.depth || prev.gondolaPared.depth || 0.47,
           },
         ],
@@ -642,7 +642,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const cycleGondolaParedLength = (lineIdx: number, modIdx: number) => {
-    const opts = [0.7, 0.9, 1.0, 1.2];
+    const opts = [0.7, 0.9, 1.2];
     onUpdateState((prev) => {
       const lines = [...prev.gondolaPared.lines];
       const cur = lines[lineIdx];
@@ -752,18 +752,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
     });
   };
 
-  const setGondolaParedModuleHeight = (lineIdx: number, modIdx: number, h: number) => {
+  const setGondolaParedModuleHeight = (lineIdx: number, modIdx: number, _h: number) => {
     onUpdateState((prev) => {
       const lines = [...prev.gondolaPared.lines];
       const line = lines[lineIdx];
       if (!line) return prev;
       const updatedModules = [...line.modules];
-      updatedModules[modIdx] = { ...updatedModules[modIdx], height: h };
-      const maxH = updatedModules.reduce((max, m) => Math.max(max, m.height || h), h);
-      lines[lineIdx] = { ...line, height: maxH, modules: updatedModules };
+      updatedModules[modIdx] = { ...updatedModules[modIdx], height: 2.0 };
+      lines[lineIdx] = { ...line, height: 2.0, modules: updatedModules };
       return {
         ...prev,
-        gondolaPared: { ...prev.gondolaPared, lines },
+        gondolaPared: { ...prev.gondolaPared, height: 2.0, lines },
       };
     });
   };
@@ -815,7 +814,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     onUpdateState((prev) => {
       const newLineMods = [
         {
-          bl: 1.0,
+          bl: 1.2,
           height: prev.gondolaCentral.height || 1.6,
           scA: prev.gondolaCentral.shelfCount || 3,
           scB: prev.gondolaCentral.shelfCount || 3,
@@ -895,7 +894,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         modules: [
           ...cur.modules,
           {
-            bl: lastMod ? lastMod.bl : 1.0,
+            bl: lastMod ? lastMod.bl : 1.2,
             height: lastMod?.height || cur.height || prev.gondolaCentral.height || 1.6,
             scA: lastMod ? lastMod.scA : (prev.gondolaCentral.shelfCount || 3),
             scB: lastMod ? lastMod.scB : (prev.gondolaCentral.shelfCount || 3),
@@ -944,7 +943,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const cycleGondolaCentralLength = (lineIdx: number, modIdx: number) => {
-    const opts = [0.7, 0.9, 1.0, 1.2];
+    const opts = [0.7, 0.9, 1.2];
     onUpdateState((prev) => {
       const lines = [...prev.gondolaCentral.lines];
       const cur = lines[lineIdx];
@@ -1644,7 +1643,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                 cycleGondolaParedLength(gli, mi);
                               }}
                               className="hover:text-rose-400 cursor-pointer text-xs"
-                              title="Clic para cambiar largo (0.7, 0.9, 1.0, 1.2m)"
+                              title="Clic para cambiar largo (0.70m, 0.90m, 1.20m)"
                             >
                               {m.bl}m
                             </span>
@@ -1661,32 +1660,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             )}
                           </div>
 
-                          {/* Selector de Altura del Módulo */}
+                          {/* Altura del Módulo: Góndola de Pared es fija a 2.00m */}
                           <div className="flex items-center justify-between gap-1 text-[9px] bg-slate-950/70 px-1.5 py-1 rounded border border-slate-800">
                             <span className="text-slate-400 font-medium">Alto:</span>
-                            <div className="flex items-center gap-0.5">
-                              {[1.6, 1.75, 2.0, 2.2].map((hOpt) => {
-                                const curH = m.height || line.height || state.gondolaPared.height || 2.0;
-                                const isSelH = curH === hOpt;
-                                return (
-                                  <button
-                                    key={hOpt}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setGondolaParedModuleHeight(gli, mi, hOpt);
-                                    }}
-                                    className={`px-1 py-0.5 rounded font-bold transition-all ${
-                                      isSelH
-                                        ? 'bg-rose-500 text-white shadow-sm ring-1 ring-rose-300'
-                                        : 'bg-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-700'
-                                    }`}
-                                    title={`Fijar altura ${hOpt}m`}
-                                  >
-                                    {hOpt}m
-                                  </button>
-                                );
-                              })}
-                            </div>
+                            <span
+                              className="px-1.5 py-0.5 rounded font-bold text-rose-300 bg-rose-950/70 border border-rose-800/60"
+                              title="Las góndolas de pared solo pueden ser de 2 metros de alto"
+                            >
+                              2.00m (Fijo)
+                            </span>
                           </div>
 
                           {/* Selector de Profundidad del Módulo */}
@@ -1838,7 +1820,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                 cycleGondolaCentralLength(gcli, mi);
                               }}
                               className="hover:text-pink-400 cursor-pointer text-xs"
-                              title="Clic para cambiar largo"
+                              title="Clic para cambiar largo (0.70m, 0.90m, 1.20m)"
                             >
                               {m.bl}m
                             </span>

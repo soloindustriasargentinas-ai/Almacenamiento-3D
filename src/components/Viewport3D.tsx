@@ -121,6 +121,43 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
   const raycaster = useRef(new THREE.Raycaster());
   const mouseVec = useRef(new THREE.Vector2());
 
+  interface DragSession {
+    type: string;
+    idx: number;
+    initialItemX: number;
+    initialItemZ: number;
+    currentItemX: number;
+    currentItemZ: number;
+    itemW: number;
+    itemD: number;
+    targetGroup: THREE.Group | null;
+    initialGroupPos: { x: number; z: number };
+    attachedPunteras: { idx: number; group: THREE.Group; initialPos: { x: number; z: number } }[];
+    initialSelBoxMin: THREE.Vector3 | null;
+    initialSelBoxMax: THREE.Vector3 | null;
+  }
+  const dragSessionRef = useRef<DragSession | null>(null);
+
+  const getObjectGroup = (type: string, idx: number): THREE.Group | null => {
+    if (idx < 0) return null;
+    let parentGroup: THREE.Group | null = null;
+    if (type === 'minirack') parentGroup = minirackGroupRef.current;
+    else if (type === 'estanteria') parentGroup = shelfGroupRef.current;
+    else if (type === 'gondolaPared') parentGroup = gondolaParedGroupRef.current;
+    else if (type === 'gondolaCentral') parentGroup = gondolaCentralGroupRef.current;
+    else if (type === 'obstacle') parentGroup = obstacleGroupRef.current;
+    else if (type === 'puntera') parentGroup = punteraGroupRef.current;
+    else if (type === 'heladera') parentGroup = heladeraGroupRef.current;
+    else if (type === 'checkout') parentGroup = checkoutGroupRef.current;
+    else if (type === 'door') parentGroup = doorGroupRef.current;
+    else if (type === 'heavyRack') parentGroup = heavyRackGroupRef.current;
+
+    if (parentGroup && parentGroup.children[idx] instanceof THREE.Group) {
+      return parentGroup.children[idx] as THREE.Group;
+    }
+    return null;
+  };
+
   // Initialize Three.js
   useEffect(() => {
     if (!canvasRef.current || !dimCanvasRef.current || !containerRef.current) return;
@@ -261,10 +298,23 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
 
     window.addEventListener('resize', handleResize);
 
+    const canvas = canvasRef.current;
+    const handleContextLost = (e: Event) => {
+      e.preventDefault();
+      console.warn('WebGL Context Lost - prevent canvas crash');
+    };
+    const handleContextRestored = () => {
+      console.log('WebGL Context Restored');
+    };
+    canvas.addEventListener('webglcontextlost', handleContextLost, false);
+    canvas.addEventListener('webglcontextrestored', handleContextRestored, false);
+
     return () => {
       running = false;
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       window.removeEventListener('resize', handleResize);
+      canvas.removeEventListener('webglcontextlost', handleContextLost);
+      canvas.removeEventListener('webglcontextrestored', handleContextRestored);
       renderer.dispose();
     };
   }, []);
@@ -288,13 +338,23 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     return mesh;
   };
 
+  const disposeHierarchy = (obj: THREE.Object3D) => {
+    obj.traverse((child) => {
+      if (child instanceof THREE.Mesh || child instanceof THREE.LineSegments) {
+        if (child.geometry) {
+          child.geometry.dispose();
+        }
+      }
+    });
+  };
+
   const clearGroup = (g: THREE.Group) => {
     while (g.children.length > 0) {
       const child = g.children.pop();
-      if (child instanceof THREE.Mesh && child.geometry) {
-        child.geometry.dispose();
+      if (child) {
+        disposeHierarchy(child);
+        g.remove(child);
       }
-      if (child) g.remove(child);
     }
   };
 
@@ -453,7 +513,7 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     clearGroup(gondolaParedGroupRef.current);
     state.gondolaPared.lines.forEach((gline: GondolaParedLine, gli: number) => {
       const gGroup = new THREE.Group();
-      const H = gline.height || state.gondolaPared.height || 2.0;
+      const H = 2.0; // Góndolas de pared solo pueden ser de 2 metros de alto
       const colW = 0.04;
       const colD = 0.06;
       const meta = { type: 'gondolaPared', idx: gli };
@@ -490,13 +550,13 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       };
 
       let cumX = 0;
-      const firstPostH = gline.modules[0]?.height || H;
+      const firstPostH = 2.0;
       buildGUpright(gGroup, 0, firstPostH, defaultD);
 
       gline.modules.forEach((mod, modIdx) => {
         const mW = mod.bl;
         const mD = mod.depth || defaultD;
-        const mH = mod.height || H;
+        const mH = 2.0;
         const sc = mod.sc || state.gondolaPared.shelfCount || 5;
 
         // Slotted back panel (paneles traseros)
@@ -521,8 +581,7 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
         }
 
         cumX += mW;
-        const nextMod = gline.modules[modIdx + 1];
-        const nextPostH = nextMod ? Math.max(mH, nextMod.height || H) : mH;
+        const nextPostH = 2.0;
         buildGUpright(gGroup, cumX, nextPostH, mD);
       });
     });
@@ -630,26 +689,28 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     clearGroup(obstacleGroupRef.current);
     const colH = state.warehouse.enabled ? state.warehouse.height : 4.0;
     state.obstacles.forEach((obs: Obstacle, oi: number) => {
+      const obsGroup = new THREE.Group();
+      obstacleGroupRef.current.add(obsGroup);
       const meta = { type: 'obstacle', idx: oi };
       if (obs.type === 'column') {
         const dVal = obs.d || obs.w;
-        obstacleGroupRef.current.add(mkBox(obs.w, colH, dVal, mats.column, obs.x, 0, obs.z, meta));
-        obstacleGroupRef.current.add(mkBox(obs.w + 0.12, 0.1, dVal + 0.12, mats.colBase, obs.x - 0.06, 0, obs.z - 0.06, meta));
+        obsGroup.add(mkBox(obs.w, colH, dVal, mats.column, obs.x, 0, obs.z, meta));
+        obsGroup.add(mkBox(obs.w + 0.12, 0.1, dVal + 0.12, mats.colBase, obs.x - 0.06, 0, obs.z - 0.06, meta));
       } else {
         const fw = obs.w;
         const fh = obs.fh || 2.5;
         const ft = 0.12;
         const rot = obs.rotation || 0;
         if (rot === 0) {
-          obstacleGroupRef.current.add(mkBox(ft, fh, ft, mats.opening, obs.x, 0, obs.z, meta));
-          obstacleGroupRef.current.add(mkBox(ft, fh, ft, mats.opening, obs.x + fw - ft, 0, obs.z, meta));
-          obstacleGroupRef.current.add(mkBox(fw, ft, ft, mats.opening, obs.x, fh - ft, obs.z, meta));
-          obstacleGroupRef.current.add(mkBox(fw, 0.015, 0.18, mats.openFloor, obs.x, 0, obs.z - 0.09, meta));
+          obsGroup.add(mkBox(ft, fh, ft, mats.opening, obs.x, 0, obs.z, meta));
+          obsGroup.add(mkBox(ft, fh, ft, mats.opening, obs.x + fw - ft, 0, obs.z, meta));
+          obsGroup.add(mkBox(fw, ft, ft, mats.opening, obs.x, fh - ft, obs.z, meta));
+          obsGroup.add(mkBox(fw, 0.015, 0.18, mats.openFloor, obs.x, 0, obs.z - 0.09, meta));
         } else {
-          obstacleGroupRef.current.add(mkBox(ft, fh, ft, mats.opening, obs.x, 0, obs.z, meta));
-          obstacleGroupRef.current.add(mkBox(ft, fh, ft, mats.opening, obs.x, 0, obs.z + fw - ft, meta));
-          obstacleGroupRef.current.add(mkBox(ft, ft, fw, mats.opening, obs.x, fh - ft, obs.z, meta));
-          obstacleGroupRef.current.add(mkBox(0.18, 0.015, fw, mats.openFloor, obs.x - 0.09, 0, obs.z, meta));
+          obsGroup.add(mkBox(ft, fh, ft, mats.opening, obs.x, 0, obs.z, meta));
+          obsGroup.add(mkBox(ft, fh, ft, mats.opening, obs.x, 0, obs.z + fw - ft, meta));
+          obsGroup.add(mkBox(ft, ft, fw, mats.opening, obs.x, fh - ft, obs.z, meta));
+          obsGroup.add(mkBox(0.18, 0.015, fw, mats.openFloor, obs.x - 0.09, 0, obs.z, meta));
         }
       }
     });
@@ -1055,7 +1116,7 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
 
     // 13. Update Selection Box
     updateSelectionHelper();
-  }, [state, selection]);
+  }, [state]);
 
   // Update Golden Selection Bounding Box Helper
   const updateSelectionHelper = () => {
@@ -1082,7 +1143,7 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     } else if (selection.type === 'gondolaPared' && state.gondolaPared.lines[selection.idx]) {
       const b = getGondolaParedLineBounds(state.gondolaPared.lines[selection.idx], state.gondolaPared.depth);
       mn = new THREE.Vector3(b.x0, 0, b.z0);
-      mx = new THREE.Vector3(b.x1, state.gondolaPared.height || 2.0, b.z1);
+      mx = new THREE.Vector3(b.x1, 2.0, b.z1);
     } else if (selection.type === 'gondolaCentral' && state.gondolaCentral.lines[selection.idx]) {
       const b = getGondolaCentralLineBounds(state.gondolaCentral.lines[selection.idx], state.gondolaCentral.depth);
       const h = state.gondolaCentral.lines[selection.idx].height || state.gondolaCentral.height || 1.6;
@@ -1120,6 +1181,10 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       selBoxHelperRef.current = boxHelper;
     }
   };
+
+  useEffect(() => {
+    updateSelectionHelper();
+  }, [selection]);
 
   // ── 2D Dimensions Rendering on Canvas ──
   const drawDimensions = () => {
@@ -1370,38 +1435,109 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
         if (raycaster.current.ray.intersectPlane(floorPlane.current, hitFloor)) {
           let curX = 0;
           let curZ = 0;
+          let itemW = 1.0;
+          let itemD = 1.0;
           if (data.type === 'minirack' && state.lines[data.idx]) {
-            curX = state.lines[data.idx].xOff;
-            curZ = state.lines[data.idx].zOff;
+            const l = state.lines[data.idx];
+            curX = l.xOff;
+            curZ = l.zOff;
+            const b = getMinirackLineBounds(l, state.depth);
+            itemW = b.x1 - b.x0;
+            itemD = b.z1 - b.z0;
           } else if (data.type === 'estanteria' && state.shelfLines[data.idx]) {
-            curX = state.shelfLines[data.idx].xOff;
-            curZ = state.shelfLines[data.idx].zOff;
+            const l = state.shelfLines[data.idx];
+            curX = l.xOff;
+            curZ = l.zOff;
+            const b = getShelfLineBounds(l, state.shelfDepth);
+            itemW = b.x1 - b.x0;
+            itemD = b.z1 - b.z0;
           } else if (data.type === 'gondolaPared' && state.gondolaPared.lines[data.idx]) {
-            curX = state.gondolaPared.lines[data.idx].xOff;
-            curZ = state.gondolaPared.lines[data.idx].zOff;
+            const l = state.gondolaPared.lines[data.idx];
+            curX = l.xOff;
+            curZ = l.zOff;
+            const b = getGondolaParedLineBounds(l, state.gondolaPared.depth);
+            itemW = b.x1 - b.x0;
+            itemD = b.z1 - b.z0;
           } else if (data.type === 'gondolaCentral' && state.gondolaCentral.lines[data.idx]) {
-            curX = state.gondolaCentral.lines[data.idx].xOff;
-            curZ = state.gondolaCentral.lines[data.idx].zOff;
+            const l = state.gondolaCentral.lines[data.idx];
+            curX = l.xOff;
+            curZ = l.zOff;
+            const b = getGondolaCentralLineBounds(l, state.gondolaCentral.depth);
+            itemW = b.x1 - b.x0;
+            itemD = b.z1 - b.z0;
           } else if (data.type === 'obstacle' && state.obstacles[data.idx]) {
-            curX = state.obstacles[data.idx].x;
-            curZ = state.obstacles[data.idx].z;
+            const o = state.obstacles[data.idx];
+            curX = o.x;
+            curZ = o.z;
+            const b = getObstacleBounds(o, state.warehouse.height);
+            itemW = b.x1 - b.x0;
+            itemD = b.z1 - b.z0;
           } else if (data.type === 'puntera' && state.punteras?.[data.idx]) {
-            curX = state.punteras[data.idx].x;
-            curZ = state.punteras[data.idx].z;
+            const p = state.punteras[data.idx];
+            curX = p.x;
+            curZ = p.z;
+            const b = getPunteraBounds(p);
+            itemW = b.x1 - b.x0;
+            itemD = b.z1 - b.z0;
           } else if (data.type === 'heladera' && state.heladeras?.[data.idx]) {
-            curX = state.heladeras[data.idx].x;
-            curZ = state.heladeras[data.idx].z;
+            const h = state.heladeras[data.idx];
+            curX = h.x;
+            curZ = h.z;
+            const b = getHeladeraBounds(h);
+            itemW = b.x1 - b.x0;
+            itemD = b.z1 - b.z0;
           } else if (data.type === 'checkout' && state.checkouts?.[data.idx]) {
-            curX = state.checkouts[data.idx].x;
-            curZ = state.checkouts[data.idx].z;
+            const c = state.checkouts[data.idx];
+            curX = c.x;
+            curZ = c.z;
+            const b = getCheckoutBounds(c);
+            itemW = b.x1 - b.x0;
+            itemD = b.z1 - b.z0;
           } else if (data.type === 'door' && state.doors?.[data.idx]) {
-            curX = state.doors[data.idx].x;
-            curZ = state.doors[data.idx].z;
+            const d = state.doors[data.idx];
+            curX = d.x;
+            curZ = d.z;
+            const b = getDoorBounds(d);
+            itemW = b.x1 - b.x0;
+            itemD = b.z1 - b.z0;
           } else if (data.type === 'heavyRack' && state.heavyRacks?.lines?.[data.idx]) {
-            curX = state.heavyRacks.lines[data.idx].xOff;
-            curZ = state.heavyRacks.lines[data.idx].zOff;
+            const l = state.heavyRacks.lines[data.idx];
+            curX = l.xOff;
+            curZ = l.zOff;
+            const b = getHeavyRackLineBounds(l, state.heavyRacks.depth);
+            itemW = b.x1 - b.x0;
+            itemD = b.z1 - b.z0;
           }
           dragOffsetRef.current = { x: hitFloor.x - curX, z: hitFloor.z - curZ };
+
+          const targetGrp = getObjectGroup(data.type, data.idx);
+          const attachedPunteras: { idx: number; group: THREE.Group; initialPos: { x: number; z: number } }[] = [];
+          if (data.type === 'gondolaCentral') {
+            (state.punteras || []).forEach((p, pIdx) => {
+              if (p.attachedCentralIdx === data.idx) {
+                const pGrp = getObjectGroup('puntera', pIdx);
+                if (pGrp) {
+                  attachedPunteras.push({ idx: pIdx, group: pGrp, initialPos: { x: pGrp.position.x, z: pGrp.position.z } });
+                }
+              }
+            });
+          }
+
+          dragSessionRef.current = {
+            type: data.type,
+            idx: data.idx,
+            initialItemX: curX,
+            initialItemZ: curZ,
+            currentItemX: curX,
+            currentItemZ: curZ,
+            itemW,
+            itemD,
+            targetGroup: targetGrp,
+            initialGroupPos: targetGrp ? { x: targetGrp.position.x, z: targetGrp.position.z } : { x: 0, z: 0 },
+            attachedPunteras,
+            initialSelBoxMin: selBoxHelperRef.current ? selBoxHelperRef.current.box.min.clone() : null,
+            initialSelBoxMax: selBoxHelperRef.current ? selBoxHelperRef.current.box.max.clone() : null,
+          };
         }
         return;
       }
@@ -1411,7 +1547,7 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isDraggingRef.current || !canvasRef.current || !cameraRef.current) return;
+    if (!isDraggingRef.current || !canvasRef.current || !cameraRef.current || !dragSessionRef.current) return;
     const dist = Math.hypot(e.clientX - mouseDownPosRef.current.x, e.clientY - mouseDownPosRef.current.y);
     if (dist < 4) return;
 
@@ -1421,29 +1557,43 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
 
     const hitFloor = new THREE.Vector3();
     if (raycaster.current.ray.intersectPlane(floorPlane.current, hitFloor)) {
-      const targetX = snap10(hitFloor.x - dragOffsetRef.current.x);
-      const targetZ = snap10(hitFloor.z - dragOffsetRef.current.z);
+      const session = dragSessionRef.current;
+      const rawTargetX = snap10(hitFloor.x - dragOffsetRef.current.x);
+      const rawTargetZ = snap10(hitFloor.z - dragOffsetRef.current.z);
 
-      if (selection.type === 'minirack' && selection.idx !== null) {
-        onMoveMinirack(selection.idx, targetX, targetZ);
-      } else if (selection.type === 'estanteria' && selection.idx !== null) {
-        onMoveShelf(selection.idx, targetX, targetZ);
-      } else if (selection.type === 'gondolaPared' && selection.idx !== null) {
-        onMoveGondolaPared(selection.idx, targetX, targetZ);
-      } else if (selection.type === 'gondolaCentral' && selection.idx !== null) {
-        onMoveGondolaCentral(selection.idx, targetX, targetZ);
-      } else if (selection.type === 'obstacle' && selection.idx !== null) {
-        onMoveObstacle(selection.idx, targetX, targetZ);
-      } else if (selection.type === 'puntera' && selection.idx !== null && onMovePuntera) {
-        onMovePuntera(selection.idx, targetX, targetZ);
-      } else if (selection.type === 'heladera' && selection.idx !== null && onMoveHeladera) {
-        onMoveHeladera(selection.idx, targetX, targetZ);
-      } else if (selection.type === 'checkout' && selection.idx !== null && onMoveCheckout) {
-        onMoveCheckout(selection.idx, targetX, targetZ);
-      } else if (selection.type === 'door' && selection.idx !== null && onMoveDoor) {
-        onMoveDoor(selection.idx, targetX, targetZ);
-      } else if (selection.type === 'heavyRack' && selection.idx !== null && onMoveHeavyRack) {
-        onMoveHeavyRack(selection.idx, targetX, targetZ);
+      const maxAllowedX = Math.max(0, snap10(state.warehouse.width - session.itemW));
+      const maxAllowedZ = Math.max(0, snap10(state.warehouse.depth - session.itemD));
+      const targetX = Math.max(0, Math.min(maxAllowedX, rawTargetX));
+      const targetZ = Math.max(0, Math.min(maxAllowedZ, rawTargetZ));
+
+      if (session.currentItemX === targetX && session.currentItemZ === targetZ) {
+        return;
+      }
+
+      session.currentItemX = targetX;
+      session.currentItemZ = targetZ;
+
+      const deltaX = targetX - session.initialItemX;
+      const deltaZ = targetZ - session.initialItemZ;
+
+      // Update 3D mesh position directly - 0 memory allocation, 0 React re-render
+      if (session.targetGroup) {
+        session.targetGroup.position.x = session.initialGroupPos.x + deltaX;
+        session.targetGroup.position.z = session.initialGroupPos.z + deltaZ;
+      }
+
+      // Move attached punteras in sync
+      session.attachedPunteras.forEach((p) => {
+        p.group.position.x = p.initialPos.x + deltaX;
+        p.group.position.z = p.initialPos.z + deltaZ;
+      });
+
+      // Update selection bounding box helper in real-time
+      if (selBoxHelperRef.current && session.initialSelBoxMin && session.initialSelBoxMax) {
+        selBoxHelperRef.current.box.min.x = session.initialSelBoxMin.x + deltaX;
+        selBoxHelperRef.current.box.max.x = session.initialSelBoxMax.x + deltaX;
+        selBoxHelperRef.current.box.min.z = session.initialSelBoxMin.z + deltaZ;
+        selBoxHelperRef.current.box.max.z = session.initialSelBoxMax.z + deltaZ;
       }
     }
   };
@@ -1452,6 +1602,34 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     if (isDraggingRef.current) {
       isDraggingRef.current = false;
       if (controlsRef.current) controlsRef.current.enabled = true;
+
+      const session = dragSessionRef.current;
+      dragSessionRef.current = null;
+
+      if (session && (session.currentItemX !== session.initialItemX || session.currentItemZ !== session.initialItemZ)) {
+        const { type, idx, currentItemX, currentItemZ } = session;
+        if (type === 'minirack') {
+          onMoveMinirack(idx, currentItemX, currentItemZ);
+        } else if (type === 'estanteria') {
+          onMoveShelf(idx, currentItemX, currentItemZ);
+        } else if (type === 'gondolaPared') {
+          onMoveGondolaPared(idx, currentItemX, currentItemZ);
+        } else if (type === 'gondolaCentral') {
+          onMoveGondolaCentral(idx, currentItemX, currentItemZ);
+        } else if (type === 'obstacle') {
+          onMoveObstacle(idx, currentItemX, currentItemZ);
+        } else if (type === 'puntera' && onMovePuntera) {
+          onMovePuntera(idx, currentItemX, currentItemZ);
+        } else if (type === 'heladera' && onMoveHeladera) {
+          onMoveHeladera(idx, currentItemX, currentItemZ);
+        } else if (type === 'checkout' && onMoveCheckout) {
+          onMoveCheckout(idx, currentItemX, currentItemZ);
+        } else if (type === 'door' && onMoveDoor) {
+          onMoveDoor(idx, currentItemX, currentItemZ);
+        } else if (type === 'heavyRack' && onMoveHeavyRack) {
+          onMoveHeavyRack(idx, currentItemX, currentItemZ);
+        }
+      }
     }
   };
 
