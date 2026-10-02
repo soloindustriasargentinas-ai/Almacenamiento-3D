@@ -1,12 +1,12 @@
 import React from 'react';
-import { AppState, SelectionState } from '../types';
+import { AppState, SelectionState, CheckoutCounter } from '../types';
 import {
   realGondolaCentralLineWidth,
   realGondolaParedLineWidth,
   realMinirackLineWidth,
   realShelfLineWidth,
 } from '../utils/calculations';
-import { X, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, RotateCw, Trash2 } from 'lucide-react';
+import { X, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, RotateCw, Trash2, Check } from 'lucide-react';
 
 interface FloatingInfoProps {
   state: AppState;
@@ -16,6 +16,7 @@ interface FloatingInfoProps {
   onRotate: () => void;
   onDelete: () => void;
   onSetGondolaCentralModuleHeight?: (lineIdx: number, modIdx: number, height: number) => void;
+  onUpdateCheckout?: (idx: number, patch: Partial<CheckoutCounter>) => void;
 }
 
 export const FloatingInfo: React.FC<FloatingInfoProps> = ({
@@ -26,6 +27,7 @@ export const FloatingInfo: React.FC<FloatingInfoProps> = ({
   onRotate,
   onDelete,
   onSetGondolaCentralModuleHeight,
+  onUpdateCheckout,
 }) => {
   if (!selection.type || selection.idx === null) return null;
 
@@ -93,7 +95,7 @@ export const FloatingInfo: React.FC<FloatingInfoProps> = ({
     const h = state.heladeras?.[selection.idx];
     if (!h) return null;
     curRot = ((h.rotation || 0) % 360 + 360) % 360;
-    const typeLabel = h.type === 'isla_congelados' ? 'Isla de Congelados' : h.type === 'mural_abierto' ? 'Mural Abierto' : 'Mural Vidrio Templado';
+    const typeLabel = h.type === 'mostrador' ? 'Heladera Mostrador Vitrina' : h.type === 'isla_congelados' ? 'Isla de Congelados' : h.type === 'mural_abierto' ? 'Mural Abierto' : 'Mural Vidrio Templado';
     title = `Heladera ${selection.idx + 1}: ${typeLabel}`;
     subInfo = `X: ${h.x.toFixed(1)}m · Z: ${h.z.toFixed(1)}m · ${h.width}m × ${h.depth}m × ${h.height}m · Color: ${h.color} · Giro: ${curRot}°`;
     colorBadge = 'border-cyan-500 text-cyan-400';
@@ -102,7 +104,7 @@ export const FloatingInfo: React.FC<FloatingInfoProps> = ({
     if (!c) return null;
     curRot = ((c.rotation || 0) % 360 + 360) % 360;
     title = `Check Out / Caja ${selection.idx + 1}`;
-    subInfo = `X: ${c.x.toFixed(1)}m · Z: ${c.z.toFixed(1)}m · Largo: ${c.length}m · Ancho: ${c.width}m · Escáner: ${c.scannerSide} · Giro: ${curRot}°`;
+    subInfo = `X: ${c.x.toFixed(1)}m · Z: ${c.z.toFixed(1)}m · Largo: ${c.length.toFixed(2)}m · Ancho: ${c.width.toFixed(2)}m · Cajero: ${c.scannerSide || 'derecha'} · Giro: ${curRot}°`;
     colorBadge = 'border-emerald-500 text-emerald-400';
   } else if (selection.type === 'heavyRack') {
     const hr = state.heavyRacks?.lines?.[selection.idx];
@@ -171,6 +173,65 @@ export const FloatingInfo: React.FC<FloatingInfoProps> = ({
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Check Out: Largo y Lado del Cajero editables directamente */}
+      {selection.type === 'checkout' && state.checkouts?.[selection.idx] && (
+        <div className="mb-3 p-2.5 bg-slate-950/70 rounded-xl border border-emerald-900/40 space-y-2">
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 block mb-1">
+              Largo de la Caja:
+            </span>
+            <div className="grid grid-cols-3 gap-1">
+              {[1.60, 1.80, 2.00].map((len) => {
+                const curLen = state.checkouts![selection.idx!].length;
+                const isSelected = Math.abs(curLen - len) < 0.05;
+                return (
+                  <button
+                    key={len}
+                    onClick={() => onUpdateCheckout?.(selection.idx!, { length: len })}
+                    className={`py-1 rounded text-[11px] font-bold transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-emerald-500 text-slate-950 shadow-sm ring-1 ring-emerald-300 font-black'
+                        : 'bg-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-700'
+                    }`}
+                  >
+                    {len.toFixed(2)}m
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 block mb-1">
+              Lado del Cajero:
+            </span>
+            <div className="grid grid-cols-2 gap-1">
+              {[
+                { side: 'derecha' as const, label: '👉 Derecha' },
+                { side: 'izquierda' as const, label: '👈 Izquierda' },
+              ].map((s) => {
+                const curSide = state.checkouts![selection.idx!].scannerSide || 'derecha';
+                const isSelected = curSide === s.side;
+                return (
+                  <button
+                    key={s.side}
+                    onClick={() => onUpdateCheckout?.(selection.idx!, { scannerSide: s.side })}
+                    className={`py-1 px-1 rounded text-[10px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-emerald-500 text-slate-950 shadow-sm ring-1 ring-emerald-300 font-black'
+                        : 'bg-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-700'
+                    }`}
+                  >
+                    <span>{s.label}</span>
+                    {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}

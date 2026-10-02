@@ -122,10 +122,10 @@ export interface HeladeraComercial {
   x: number;
   z: number;
   rotation: number; // 0, 90, 180, 270
-  type: 'mural_vidrio' | 'mural_abierto' | 'isla_congelados';
-  width: number; // 1.20, 1.80, 2.40
-  depth: number; // 0.85, 1.00
-  height: number; // 2.00, 2.20
+  type: 'mural_vidrio' | 'mural_abierto' | 'isla_congelados' | 'mostrador';
+  width: number; // 1.20, 1.60, 1.80, 2.00, 2.40
+  depth: number; // 0.85, 0.95, 1.00
+  height: number; // 1.25, 2.00, 2.20
   color: 'blanco' | 'negro' | 'inox';
   doorsCount: number; // 2, 3, 4
   illuminated: boolean;
@@ -138,8 +138,8 @@ export interface CheckoutCounter {
   z: number;
   rotation: number; // 0, 90, 180, 270
   type: 'estandar' | 'pasante' | 'express';
-  length: number; // 1.80, 2.20, 2.60
-  width: number; // 1.00, 1.15
+  length: number; // 1.60, 1.80, 2.00
+  width: number; // 1.00, 1.10
   height: number; // 0.88
   scannerSide: 'derecha' | 'izquierda';
   hasBelt: boolean;

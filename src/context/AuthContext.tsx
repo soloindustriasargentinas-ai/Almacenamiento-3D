@@ -105,9 +105,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
-    await fbSignOut(auth);
-    setUser(null);
-    setProfile(null);
+    try {
+      await fbSignOut(auth);
+    } catch (err) {
+      console.warn('Firebase fbSignOut advertencia o error, limpiando sesión local:', err);
+    } finally {
+      setUser(null);
+      setProfile(null);
+      try {
+        localStorage.clear();
+        sessionStorage.clear();
+      } catch {}
+    }
   };
 
   const changeSubscription = async (plan: 'free' | 'pro' | 'enterprise') => {

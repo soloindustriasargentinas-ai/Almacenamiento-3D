@@ -51,6 +51,8 @@ interface Viewport3DProps {
   onMoveDoor?: (idx: number, x: number, z: number) => void;
   onMoveHeavyRack?: (idx: number, x: number, z: number) => void;
   onSetViewMode: (mode: ViewMode) => void;
+  onToggleShadows?: () => void;
+  onToggleDims?: () => void;
 }
 
 export const Viewport3D: React.FC<Viewport3DProps> = ({
@@ -68,10 +70,15 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
   onMoveDoor,
   onMoveHeavyRack,
   onSetViewMode,
+  onToggleShadows,
+  onToggleDims,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dimCanvasRef = useRef<HTMLCanvasElement>(null);
+
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   // Scene references
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -307,19 +314,24 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     if (state.viewMode === 'realistic') {
       sceneRef.current.background = new THREE.Color(0x0c1222);
       if (rendererRef.current) rendererRef.current.toneMappingExposure = 1.45 * state.lightIntensity;
-      if (ambLightRef.current) ambLightRef.current.intensity = 0.45 * state.lightIntensity;
-      if (sunLightRef.current) sunLightRef.current.intensity = 2.0 * state.lightIntensity;
-      if (hemiLightRef.current) hemiLightRef.current.intensity = 0.35 * state.lightIntensity;
+      if (ambLightRef.current) ambLightRef.current.intensity = (state.showShadows ? 0.45 : 0.95) * state.lightIntensity;
+      if (sunLightRef.current) {
+        sunLightRef.current.intensity = (state.showShadows ? 2.0 : 1.1) * state.lightIntensity;
+        sunLightRef.current.castShadow = state.showShadows;
+      }
+      if (hemiLightRef.current) hemiLightRef.current.intensity = (state.showShadows ? 0.35 : 0.65) * state.lightIntensity;
     } else {
       sceneRef.current.background = new THREE.Color(0x090d16);
       if (rendererRef.current) rendererRef.current.toneMappingExposure = 1.0 * state.lightIntensity;
-      if (ambLightRef.current) ambLightRef.current.intensity = 0.65 * state.lightIntensity;
-      if (sunLightRef.current) sunLightRef.current.intensity = 1.4 * state.lightIntensity;
-      if (hemiLightRef.current) hemiLightRef.current.intensity = 0.45 * state.lightIntensity;
+      if (ambLightRef.current) ambLightRef.current.intensity = (state.showShadows ? 0.65 : 1.10) * state.lightIntensity;
+      if (sunLightRef.current) {
+        sunLightRef.current.intensity = (state.showShadows ? 1.4 : 0.8) * state.lightIntensity;
+        sunLightRef.current.castShadow = state.showShadows;
+      }
+      if (hemiLightRef.current) hemiLightRef.current.intensity = (state.showShadows ? 0.45 : 0.75) * state.lightIntensity;
     }
 
     if (gridHelperRef.current) gridHelperRef.current.visible = state.showGrid;
-    if (rendererRef.current) rendererRef.current.shadowMap.enabled = state.showShadows;
 
     // 1. Miniracks 3D
     clearGroup(minirackGroupRef.current);
@@ -770,28 +782,52 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       const meta = { type: 'heladera', idx };
       const bodyMat = h.color === 'negro' ? mats.refrigBodyBlack : h.color === 'inox' ? mats.refrigBodyInox : mats.refrigBodyWhite;
 
-      g.add(mkBox(W, 0.28, D, mats.refrigBodyBlack, 0, 0, 0, meta));
-      g.add(mkBox(0.06, H - 0.28, D, bodyMat, 0, 0.28, 0, meta));
-      g.add(mkBox(0.06, H - 0.28, D, bodyMat, W - 0.06, 0.28, 0, meta));
-      g.add(mkBox(W, 0.20, D, bodyMat, 0, H - 0.20, 0, meta));
-      g.add(mkBox(W - 0.12, 0.15, 0.02, mats.refrigLed, 0.06, H - 0.18, D - 0.02, meta));
-      g.add(mkBox(W - 0.12, H - 0.48, 0.04, bodyMat, 0.06, 0.28, 0, meta));
+      if (h.type === 'mostrador') {
+        // Heladera Mostrador / Vitrina Refrigerada para Fiambrería, Carnicería y Lácteos
+        // Base cerrada y unidad condensadora
+        g.add(mkBox(W, 0.45, D, bodyMat, 0, 0, 0, meta));
+        // Rejilla de ventilación frontal/inferior
+        g.add(mkBox(W - 0.12, 0.12, 0.02, mats.colBase, 0.06, 0.04, D - 0.015, meta));
+        // Bandeja/plano interior de exhibición en acero inoxidable
+        g.add(mkBox(W - 0.06, 0.03, D - 0.08, mats.refrigBodyInox, 0.03, 0.45, 0.04, meta));
+        // Estante intermedio de vidrio para exhibición
+        g.add(mkBox(W - 0.08, 0.012, D * 0.52, mats.glass, 0.04, 0.80, 0.08, meta));
+        // Tira de iluminación LED bajo estante
+        g.add(mkBox(W - 0.12, 0.015, 0.02, mats.refrigLed, 0.06, 0.78, 0.12, meta));
+        // Vidrio panorámico frontal
+        g.add(mkBox(W - 0.06, H - 0.48, 0.012, mats.glass, 0.03, 0.46, D - 0.03, meta));
+        // Laterales de vidrio
+        g.add(mkBox(0.012, H - 0.48, D - 0.08, mats.glass, 0.02, 0.46, 0.04, meta));
+        g.add(mkBox(0.012, H - 0.48, D - 0.08, mats.glass, W - 0.032, 0.46, 0.04, meta));
+        // Plano superior de trabajo / mostrador de despacho
+        g.add(mkBox(W, 0.035, 0.30, mats.checkoutTop, 0, H - 0.035, 0.02, meta));
+        // Puertas corredizas traseras de atención
+        g.add(mkBox(W - 0.08, H - 0.52, 0.01, mats.glass, 0.04, 0.48, 0.035, meta));
+      } else {
+        // Murales verticales
+        g.add(mkBox(W, 0.28, D, mats.refrigBodyBlack, 0, 0, 0, meta));
+        g.add(mkBox(0.06, H - 0.28, D, bodyMat, 0, 0.28, 0, meta));
+        g.add(mkBox(0.06, H - 0.28, D, bodyMat, W - 0.06, 0.28, 0, meta));
+        g.add(mkBox(W, 0.20, D, bodyMat, 0, H - 0.20, 0, meta));
+        g.add(mkBox(W - 0.12, 0.15, 0.02, mats.refrigLed, 0.06, H - 0.18, D - 0.02, meta));
+        g.add(mkBox(W - 0.12, H - 0.48, 0.04, bodyMat, 0.06, 0.28, 0, meta));
 
-      const levels = 4;
-      const gap = (H - 0.54) / levels;
-      for (let s = 1; s <= levels; s++) {
-        const sy = 0.28 + s * gap;
-        g.add(mkBox(W - 0.14, 0.015, D - 0.14, mats.shelf, 0.07, sy, 0.05, meta));
-      }
+        const levels = 4;
+        const gap = (H - 0.54) / levels;
+        for (let s = 1; s <= levels; s++) {
+          const sy = 0.28 + s * gap;
+          g.add(mkBox(W - 0.14, 0.015, D - 0.14, mats.shelf, 0.07, sy, 0.05, meta));
+        }
 
-      const doors = h.doorsCount || (W >= 2.0 ? 3 : 2);
-      const doorW = (W - 0.12) / doors;
-      for (let d = 0; d < doors; d++) {
-        const dx = 0.06 + d * doorW;
-        g.add(mkBox(doorW - 0.015, H - 0.48, 0.012, mats.glass, dx + 0.007, 0.28, D - 0.018, meta));
-        g.add(mkBox(doorW, 0.025, 0.02, mats.doorFrame, dx, 0.28, D - 0.02, meta));
-        g.add(mkBox(doorW, 0.025, 0.02, mats.doorFrame, dx, H - 0.22, D - 0.02, meta));
-        g.add(mkBox(0.02, 0.35, 0.025, mats.checkoutTop, dx + doorW - 0.035, H / 2 - 0.15, D, meta));
+        const doors = h.doorsCount || (W >= 2.0 ? 3 : 2);
+        const doorW = (W - 0.12) / doors;
+        for (let d = 0; d < doors; d++) {
+          const dx = 0.06 + d * doorW;
+          g.add(mkBox(doorW - 0.015, H - 0.48, 0.012, mats.glass, dx + 0.007, 0.28, D - 0.018, meta));
+          g.add(mkBox(doorW, 0.025, 0.02, mats.doorFrame, dx, 0.28, D - 0.02, meta));
+          g.add(mkBox(doorW, 0.025, 0.02, mats.doorFrame, dx, H - 0.22, D - 0.02, meta));
+          g.add(mkBox(0.02, 0.35, 0.025, mats.checkoutTop, dx + doorW - 0.035, H / 2 - 0.15, D, meta));
+        }
       }
     });
 
@@ -800,7 +836,7 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     (state.checkouts || []).forEach((c, idx) => {
       const g = new THREE.Group();
       const rot = ((c.rotation || 0) % 360 + 360) % 360;
-      const L = c.length || 2.2;
+      const L = c.length || 1.8;
       const W = c.width || 1.1;
       const H = c.height || 0.88;
 
@@ -821,14 +857,52 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
 
       const meta = { type: 'checkout', idx };
 
-      g.add(mkBox(L, H - 0.05, 0.65, mats.checkoutBody, 0, 0, 0, meta));
-      g.add(mkBox(L * 0.45, 0.08, W - 0.65, mats.checkoutBody, L * 0.25, 0, 0.65, meta));
-      g.add(mkBox(L, 0.05, 0.65, mats.checkoutTop, 0, H - 0.05, 0, meta));
-      g.add(mkBox(L * 0.55, 0.012, 0.50, mats.checkoutBelt, 0.10, H, 0.07, meta));
-      g.add(mkBox(L * 0.30, 0.02, 0.55, mats.checkoutTop, L * 0.68, H - 0.02, 0.05, meta));
-      const postX = L * 0.62;
-      g.add(mkBox(0.04, 0.50, 0.04, mats.checkoutTop, postX, H, 0.58, meta));
-      g.add(mkBox(0.22, 0.16, 0.025, mats.checkoutScreen, postX - 0.09, H + 0.32, 0.56, meta));
+      // Lado Izquierdo vs Derecho del cajero
+      const isLeft = (c.scannerSide || 'derecha') === 'izquierda';
+      const beltW = 0.58;
+      const cashierW = Math.max(0.45, W - beltW); // Ancho puesto cajero (~0.52m)
+      const beltZ = isLeft ? cashierW : 0;
+      const cashierZ = isLeft ? 0 : beltW;
+
+      // 1. Mueble base del carril de la cinta transportadora
+      g.add(mkBox(L, H - 0.05, beltW, mats.checkoutBody, 0, 0, beltZ, meta));
+      g.add(mkBox(L, 0.05, beltW, mats.checkoutTop, 0, H - 0.05, beltZ, meta));
+
+      // 2. Cinta transportadora de goma negra
+      const beltLen = L * 0.52;
+      g.add(mkBox(beltLen, 0.015, beltW - 0.08, mats.checkoutBelt, 0.06, H, beltZ + 0.04, meta));
+
+      // Baranda guía lateral en acero inox (lado pasillo del cliente)
+      const guideRailZ = isLeft ? W - 0.025 : 0.005;
+      g.add(mkBox(L, 0.08, 0.02, mats.refrigBodyInox, 0, H, guideRailZ, meta));
+
+      // 3. Plato de balanza y escáner bióptico
+      const scanX = 0.06 + beltLen + 0.02;
+      const scanLen = Math.min(0.35, L * 0.20);
+      g.add(mkBox(scanLen, 0.018, beltW - 0.10, mats.glass, scanX, H, beltZ + 0.05, meta));
+      g.add(mkBox(scanLen + 0.02, 0.012, 0.02, mats.refrigBodyInox, scanX - 0.01, H + 0.01, beltZ + 0.03, meta));
+
+      // 4. Batea / rampa de embolsado de mercadería (acero inoxidable)
+      const bagX = scanX + scanLen + 0.04;
+      const bagLen = Math.max(0.35, L - bagX - 0.02);
+      g.add(mkBox(bagLen, 0.025, beltW - 0.06, mats.refrigBodyInox, bagX, H - 0.02, beltZ + 0.03, meta));
+      // Separador central de mercadería
+      g.add(mkBox(bagLen * 0.85, 0.06, 0.015, mats.checkoutTop, bagX + 0.03, H, beltZ + beltW / 2 - 0.007, meta));
+
+      // 5. Módulo del cajero (Mesa y pedestal con cajón portabilletes)
+      const deskLen = L * 0.50;
+      const deskX = L * 0.20;
+      // Cuerpo del mueble cajero (altura real de trabajo ~0.84m)
+      g.add(mkBox(deskLen, H - 0.04, cashierW, mats.checkoutBody, deskX, 0, cashierZ, meta));
+      g.add(mkBox(deskLen, 0.04, cashierW, mats.checkoutTop, deskX, H - 0.04, cashierZ, meta));
+      // Cajón portabilletes / dinero metálico
+      g.add(mkBox(0.42, 0.10, cashierW - 0.08, mats.colBase, deskX + deskLen * 0.30, H - 0.14, cashierZ + 0.04, meta));
+
+      // 6. Poste metálico y pantalla táctil POS / monitor
+      const postX = deskX + deskLen * 0.70;
+      const postZ = cashierZ + (isLeft ? cashierW - 0.12 : 0.12);
+      g.add(mkBox(0.04, 0.45, 0.04, mats.refrigBodyInox, postX, H, postZ, meta));
+      g.add(mkBox(0.24, 0.18, 0.025, mats.checkoutScreen, postX - 0.10, H + 0.28, postZ - 0.02, meta));
     });
 
     // 10. Puertas y Portones 3D (Salón y Depósito)
@@ -1054,8 +1128,17 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    // Dynamically synchronize canvas internal buffer with display size
+    if (canvas.width !== canvas.clientWidth || canvas.height !== canvas.clientHeight) {
+      if (canvas.clientWidth > 0 && canvas.clientHeight > 0) {
+        canvas.width = canvas.clientWidth;
+        canvas.height = canvas.clientHeight;
+      }
+    }
+
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if (!state.showDims) return;
+    const curState = stateRef.current;
+    if (!curState || !curState.showDims) return;
 
     const camera = cameraRef.current;
     ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
@@ -1076,44 +1159,66 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       p2: { x: number; y: number; visible: boolean },
       text: string,
       color = '#f8fafc',
-      bgColor = 'rgba(15, 23, 42, 0.88)'
+      bgColor = 'rgba(15, 23, 42, 0.94)'
     ) => {
       if (!p1.visible && !p2.visible) return;
+
+      // Draw dimension guide line connecting the endpoints
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
+
+      // Draw 45° architectural tick marks at the ends
+      const tick = 5;
+      ctx.beginPath();
+      ctx.moveTo(p1.x - tick, p1.y - tick);
+      ctx.lineTo(p1.x + tick, p1.y + tick);
+      ctx.moveTo(p2.x - tick, p2.y - tick);
+      ctx.lineTo(p2.x + tick, p2.y + tick);
+      ctx.stroke();
+
+      // Measurement badge pill in the center
       const mx = (p1.x + p2.x) / 2;
       const my = (p1.y + p2.y) / 2 - 14;
 
-      const tw = ctx.measureText(text).width + 14;
+      const tw = ctx.measureText(text).width + 16;
       ctx.fillStyle = bgColor;
       ctx.beginPath();
-      ctx.roundRect(mx - tw / 2, my - 10, tw, 20, 6);
+      ctx.roundRect(mx - tw / 2, my - 11, tw, 22, 6);
       ctx.fill();
       ctx.strokeStyle = color;
-      ctx.lineWidth = 1;
+      ctx.lineWidth = 1.5;
       ctx.stroke();
 
       ctx.fillStyle = color;
+      ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
       ctx.fillText(text, mx, my);
+      ctx.restore();
     };
 
-    if (state.activeSection === 'salon') {
+    if (curState.activeSection === 'salon') {
       // Góndolas Pared cotas
-      state.gondolaPared.lines.forEach((gline) => {
-        const b = getGondolaParedLineBounds(gline, state.gondolaPared.depth);
+      curState.gondolaPared.lines.forEach((gline) => {
+        const b = getGondolaParedLineBounds(gline, curState.gondolaPared.depth);
         const pA = project(b.x0, 0.05, b.z0);
         const pB = project(b.x1, 0.05, b.z0);
         drawPill(pA, pB, `${realGondolaParedLineWidth(gline).toFixed(2)} m (G. Pared)`, '#f43f5e');
       });
 
       // Góndolas Centrales cotas
-      state.gondolaCentral.lines.forEach((gcline) => {
-        const b = getGondolaCentralLineBounds(gcline, state.gondolaCentral.depth);
+      curState.gondolaCentral.lines.forEach((gcline) => {
+        const b = getGondolaCentralLineBounds(gcline, curState.gondolaCentral.depth);
         const pA = project(b.x0, 0.05, b.z0);
         const pB = project(b.x1, 0.05, b.z0);
         drawPill(pA, pB, `${realGondolaCentralLineWidth(gcline).toFixed(2)} m (G. Central)`, '#ec4899');
       });
 
       // Punteras cotas
-      (state.punteras || []).forEach((p) => {
+      (curState.punteras || []).forEach((p) => {
         const b = getPunteraBounds(p);
         const pA = project(b.x0, 0.05, b.z0);
         const pB = project(b.x1, 0.05, b.z0);
@@ -1121,40 +1226,42 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       });
 
       // Heladeras cotas
-      (state.heladeras || []).forEach((h) => {
+      (curState.heladeras || []).forEach((h) => {
         const b = getHeladeraBounds(h);
         const pA = project(b.x0, 0.05, b.z0);
         const pB = project(b.x1, 0.05, b.z0);
-        drawPill(pA, pB, `${(h.width || 1.8).toFixed(2)} m (Heladera)`, '#06b6d4');
+        const label = h.type === 'mostrador' ? 'Mostrador Vitrina' : h.type === 'isla_congelados' ? 'Isla' : 'Mural';
+        drawPill(pA, pB, `${(h.width || 2.0).toFixed(2)} m (${label})`, '#06b6d4');
       });
 
-      // Check Outs cotas
-      (state.checkouts || []).forEach((c) => {
+      // Check Outs cotas (1.60, 1.80, 2.00 m)
+      (curState.checkouts || []).forEach((c) => {
         const b = getCheckoutBounds(c);
         const pA = project(b.x0, 0.05, b.z0);
         const pB = project(b.x1, 0.05, b.z0);
-        drawPill(pA, pB, `${(c.length || 2.2).toFixed(2)} m (Check Out)`, '#10b981');
+        const side = (c.scannerSide || 'derecha') === 'derecha' ? 'Der' : 'Izq';
+        drawPill(pA, pB, `${(c.length || 1.8).toFixed(2)} m (Check Out ${side})`, '#10b981');
       });
     } else {
       // Minirack lines cotas (Racks Livianos)
-      state.lines.forEach((line) => {
-        const b = getMinirackLineBounds(line, state.depth);
+      curState.lines.forEach((line) => {
+        const b = getMinirackLineBounds(line, curState.depth);
         const pA = project(b.x0, 0.05, b.z0);
         const pB = project(b.x1, 0.05, b.z0);
         drawPill(pA, pB, `${realMinirackLineWidth(line).toFixed(2)} m (R. Liviano)`, '#f97316');
       });
 
       // Racks Pesados cotas
-      (state.heavyRacks?.lines || []).forEach((hrl) => {
-        const b = getHeavyRackLineBounds(hrl, state.heavyRacks.depth);
+      (curState.heavyRacks?.lines || []).forEach((hrl) => {
+        const b = getHeavyRackLineBounds(hrl, curState.heavyRacks.depth);
         const pA = project(b.x0, 0.05, b.z0);
         const pB = project(b.x1, 0.05, b.z0);
         drawPill(pA, pB, `${realHeavyRackLineWidth(hrl).toFixed(2)} m (R. Pesado)`, '#ea580c');
       });
 
       // Estanterías cotas
-      state.shelfLines.forEach((sline) => {
-        const b = getShelfLineBounds(sline, state.shelfDepth);
+      curState.shelfLines.forEach((sline) => {
+        const b = getShelfLineBounds(sline, curState.shelfDepth);
         const pA = project(b.x0, 0.05, b.z0);
         const pB = project(b.x1, 0.05, b.z0);
         drawPill(pA, pB, `${realShelfLineWidth(sline).toFixed(2)} m (Estantería)`, '#38bdf8');
@@ -1411,27 +1518,55 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
         <div className="bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-xl p-1 shadow-2xl flex gap-1 justify-center text-xs">
           <button
             onClick={() => onSetViewMode('standard')}
-            className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
-              state.viewMode === 'standard' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'
+            className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+              state.viewMode === 'standard' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             Estándar
           </button>
           <button
             onClick={() => onSetViewMode('realistic')}
-            className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
-              state.viewMode === 'realistic' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'
+            className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+              state.viewMode === 'realistic' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             Realista
           </button>
           <button
             onClick={() => onSetViewMode('wireframe')}
-            className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
-              state.viewMode === 'wireframe' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'
+            className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+              state.viewMode === 'wireframe' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             Líneas
+          </button>
+        </div>
+
+        {/* Quick Visual Toggles: Sombras y Cotas */}
+        <div className="bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-xl p-1 shadow-2xl flex gap-1 text-xs">
+          <button
+            onClick={onToggleShadows}
+            className={`flex-1 px-2 py-1.5 rounded-lg font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+              state.showShadows
+                ? 'bg-amber-500 text-slate-950 shadow-sm font-black'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+            title="Activar / Desactivar Sombras 3D"
+          >
+            <span>🌓</span>
+            <span>Sombras</span>
+          </button>
+          <button
+            onClick={onToggleDims}
+            className={`flex-1 px-2 py-1.5 rounded-lg font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+              state.showDims
+                ? 'bg-cyan-500 text-slate-950 shadow-sm font-black'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+            title="Activar / Desactivar Cotas y Medidas"
+          >
+            <span>📏</span>
+            <span>Cotas</span>
           </button>
         </div>
       </div>

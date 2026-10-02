@@ -56,6 +56,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 }) => {
   const { user, profile, signOut, changeSubscription } = useAuth();
 
+  const handleLogout = async () => {
+    try {
+      await signOut();
+    } catch (e) {
+      console.error('Error cerrando sesión:', e);
+    }
+    onGoToHome();
+  };
+
   const [activeTab, setActiveTab] = useState<'projects' | 'clients' | 'subscription' | 'profile'>('projects');
   const [projects, setProjects] = useState<DbProject[]>([]);
   const [clients, setClients] = useState<DbClient[]>([]);
@@ -290,11 +299,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </button>
 
             <button
-              onClick={signOut}
-              className="p-2 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+              onClick={handleLogout}
+              className="px-3 py-2 text-xs font-bold text-slate-400 hover:text-rose-300 hover:bg-rose-950/60 rounded-xl border border-slate-800 hover:border-rose-800/60 transition-all flex items-center gap-1.5 cursor-pointer"
               title="Cerrar Sesión"
             >
-              <LogOut className="w-5 h-5" />
+              <LogOut className="w-4 h-4 text-rose-400" />
+              <span className="hidden sm:inline">Cerrar Sesión</span>
             </button>
           </div>
         </div>
@@ -794,7 +804,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             <div className="mt-8 pt-6 border-t border-slate-800 flex justify-end">
               <button
-                onClick={signOut}
+                onClick={handleLogout}
                 className="px-4 py-2 rounded-xl bg-rose-950/80 hover:bg-rose-900 text-rose-300 text-xs font-bold transition-colors cursor-pointer"
               >
                 Cerrar Sesión

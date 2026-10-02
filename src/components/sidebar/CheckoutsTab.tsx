@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AppState, CheckoutCounter, SelectionState } from '../../types';
 import { findOpenPlacementSpot } from '../../utils/calculations';
-import { CreditCard, Plus, RotateCw, Trash2, ArrowLeftRight } from 'lucide-react';
+import { CreditCard, Plus, RotateCw, Trash2, ArrowLeftRight, Check } from 'lucide-react';
 
 interface CheckoutsTabProps {
   state: AppState;
@@ -16,9 +16,26 @@ export const CheckoutsTab: React.FC<CheckoutsTabProps> = ({
   onSelect,
   onUpdateState,
 }) => {
-  const [newLength, setNewLength] = useState<number>(2.20);
-  const [newWidth, setNewWidth] = useState<number>(1.10);
+  const [newLength, setNewLength] = useState<number>(1.80);
+  const [newWidth] = useState<number>(1.10);
   const [newSide, setNewSide] = useState<'derecha' | 'izquierda'>('derecha');
+
+  const selectedIdx = selection.type === 'checkout' && selection.idx !== null ? selection.idx : null;
+  const selectedCheckout = selectedIdx !== null && state.checkouts ? state.checkouts[selectedIdx] : null;
+
+  const handleSelectLength = (len: number) => {
+    setNewLength(len);
+    if (selectedIdx !== null) {
+      setCheckoutLength(selectedIdx, len);
+    }
+  };
+
+  const handleSelectSide = (side: 'derecha' | 'izquierda') => {
+    setNewSide(side);
+    if (selectedIdx !== null) {
+      setCheckoutSide(selectedIdx, side);
+    }
+  };
 
   const addCheckout = () => {
     onUpdateState((prev) => {
@@ -38,6 +55,30 @@ export const CheckoutsTab: React.FC<CheckoutsTabProps> = ({
       };
 
       const checkouts = [...(prev.checkouts || []), item];
+      return { ...prev, checkouts };
+    });
+  };
+
+  const setCheckoutLength = (idx: number, length: number) => {
+    onUpdateState((prev) => {
+      const checkouts = [...(prev.checkouts || [])];
+      if (!checkouts[idx]) return prev;
+      checkouts[idx] = {
+        ...checkouts[idx],
+        length,
+      };
+      return { ...prev, checkouts };
+    });
+  };
+
+  const setCheckoutSide = (idx: number, side: 'derecha' | 'izquierda') => {
+    onUpdateState((prev) => {
+      const checkouts = [...(prev.checkouts || [])];
+      if (!checkouts[idx]) return prev;
+      checkouts[idx] = {
+        ...checkouts[idx],
+        scannerSide: side,
+      };
       return { ...prev, checkouts };
     });
   };
@@ -78,6 +119,9 @@ export const CheckoutsTab: React.FC<CheckoutsTabProps> = ({
     });
   };
 
+  const activeLen = selectedCheckout ? selectedCheckout.length : newLength;
+  const activeSide = selectedCheckout ? (selectedCheckout.scannerSide || 'derecha') : newSide;
+
   return (
     <div className="space-y-4">
       {/* Header & Add */}
@@ -87,55 +131,72 @@ export const CheckoutsTab: React.FC<CheckoutsTabProps> = ({
             <CreditCard className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="font-bold text-sm text-slate-100">Check Outs / Líneas de Caja</h3>
-            <p className="text-[11px] text-slate-400">Puestos de cobro con cinta y rampa para clientes</p>
+            <h3 className="font-bold text-sm text-slate-100">Check Outs / Cajas de Cobro</h3>
+            <p className="text-[11px] text-slate-400">Líneas de caja de 1.60m, 1.80m y 2.00m (Izquierda / Derecha)</p>
           </div>
         </div>
+
+        {selectedCheckout && (
+          <div className="mb-3 px-2.5 py-1.5 rounded-lg bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-[11px] font-semibold flex items-center justify-between">
+            <span>Editando Caja #{selectedIdx! + 1} seleccionada</span>
+            <span className="font-mono text-white">{selectedCheckout.length}m · {selectedCheckout.scannerSide}</span>
+          </div>
+        )}
 
         {/* Configuration */}
         <div className="space-y-2.5 text-xs">
           <div>
-            <label className="text-slate-400 block mb-1">Largo del Check Out:</label>
+            <label className="text-slate-400 block mb-1 font-medium">
+              Largo del Check Out {selectedCheckout ? '(Caja Seleccionada)' : '(Nuevo)'}:
+            </label>
             <div className="grid grid-cols-3 gap-1">
               {[
-                { l: 1.80, label: '1.80m (Compacto)' },
-                { l: 2.20, label: '2.20m (Estándar)' },
-                { l: 2.60, label: '2.60m (Hiper)' },
-              ].map(({ l, label }) => (
-                <button
-                  key={l}
-                  onClick={() => setNewLength(l)}
-                  className={`py-1.5 px-1 rounded font-bold text-center transition-all ${
-                    newLength === l
-                      ? 'bg-emerald-500 text-slate-950 font-bold'
-                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
+                { l: 1.60, label: '1.60 m' },
+                { l: 1.80, label: '1.80 m' },
+                { l: 2.00, label: '2.00 m' },
+              ].map(({ l, label }) => {
+                const isSelected = Math.abs(activeLen - l) < 0.05;
+                return (
+                  <button
+                    key={l}
+                    onClick={() => handleSelectLength(l)}
+                    className={`py-2 px-1 rounded-lg font-bold text-center transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-emerald-500 text-slate-950 font-black shadow-md shadow-emerald-500/30 ring-2 ring-emerald-300'
+                        : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           <div>
-            <label className="text-slate-400 block mb-1">Lado del Cajero / Escáner:</label>
+            <label className="text-slate-400 block mb-1 font-medium">
+              Lado del Cajero / Salida:
+            </label>
             <div className="grid grid-cols-2 gap-1.5">
               {[
-                { side: 'derecha' as const, label: 'Salida Derecha' },
-                { side: 'izquierda' as const, label: 'Salida Izquierda' },
-              ].map((s) => (
-                <button
-                  key={s.side}
-                  onClick={() => setNewSide(s.side)}
-                  className={`py-1.5 rounded font-bold transition-all ${
-                    newSide === s.side
-                      ? 'bg-emerald-500 text-slate-950 font-bold'
-                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                  }`}
-                >
-                  {s.label}
-                </button>
-              ))}
+                { side: 'derecha' as const, label: '👉 Cajero Derecha' },
+                { side: 'izquierda' as const, label: '👈 Cajero Izquierda' },
+              ].map((s) => {
+                const isSelected = activeSide === s.side;
+                return (
+                  <button
+                    key={s.side}
+                    onClick={() => handleSelectSide(s.side)}
+                    className={`py-2 rounded-lg font-bold transition-all text-center cursor-pointer ${
+                      isSelected
+                        ? 'bg-emerald-500 text-slate-950 font-black shadow-md shadow-emerald-500/30 ring-2 ring-emerald-300'
+                        : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -162,24 +223,28 @@ export const CheckoutsTab: React.FC<CheckoutsTabProps> = ({
         ) : (
           state.checkouts.map((c, idx) => {
             const isSel = selection.type === 'checkout' && selection.idx === idx;
+            const curSide = c.scannerSide || 'derecha';
             return (
               <div
                 key={c.id || idx}
                 onClick={() => onSelect({ type: 'checkout', idx })}
                 className={`p-3 rounded-xl border transition-all cursor-pointer ${
                   isSel
-                    ? 'bg-emerald-950/30 border-emerald-500/80 shadow-md shadow-emerald-950/30'
+                    ? 'bg-emerald-950/40 border-emerald-500 shadow-lg shadow-emerald-950/40 ring-1 ring-emerald-400/50'
                     : 'bg-slate-900 border-slate-800 hover:border-slate-700'
                 }`}
               >
-                <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <span className="w-5 h-5 rounded-md bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-[10px]">
                       C#{idx + 1}
                     </span>
-                    <strong className="text-slate-200">
-                      Check Out {c.length}m (Lado {c.scannerSide})
+                    <strong className="text-slate-100 text-xs">
+                      Check Out {c.length.toFixed(2)}m
                     </strong>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-emerald-400 font-mono font-bold">
+                      {curSide === 'derecha' ? '👉 Derecha' : '👈 Izquierda'}
+                    </span>
                   </div>
 
                   <div className="flex items-center gap-1">
@@ -188,8 +253,8 @@ export const CheckoutsTab: React.FC<CheckoutsTabProps> = ({
                         e.stopPropagation();
                         toggleSide(idx);
                       }}
-                      className="p-1 rounded bg-slate-800 hover:text-emerald-400 text-slate-400"
-                      title="Invertir Lado Cajero"
+                      className="p-1 rounded bg-slate-800 hover:text-emerald-400 text-slate-400 transition-colors"
+                      title="Alternar Lado Cajero (Izquierda / Derecha)"
                     >
                       <ArrowLeftRight className="w-3.5 h-3.5" />
                     </button>
@@ -198,7 +263,7 @@ export const CheckoutsTab: React.FC<CheckoutsTabProps> = ({
                         e.stopPropagation();
                         rotateCheckout(idx);
                       }}
-                      className="p-1 rounded bg-slate-800 hover:text-emerald-400 text-slate-400"
+                      className="p-1 rounded bg-slate-800 hover:text-emerald-400 text-slate-400 transition-colors"
                       title="Rotar 90°"
                     >
                       <RotateCw className="w-3.5 h-3.5" />
@@ -208,7 +273,7 @@ export const CheckoutsTab: React.FC<CheckoutsTabProps> = ({
                         e.stopPropagation();
                         removeCheckout(idx);
                       }}
-                      className="p-1 rounded bg-slate-800 hover:text-rose-400 text-slate-400"
+                      className="p-1 rounded bg-slate-800 hover:text-rose-400 text-slate-400 transition-colors"
                       title="Eliminar"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -216,11 +281,73 @@ export const CheckoutsTab: React.FC<CheckoutsTabProps> = ({
                   </div>
                 </div>
 
-                <div className="text-[11px] text-slate-400 flex justify-between items-center">
-                  <span>Pos: ({c.x.toFixed(1)}m, {c.z.toFixed(1)}m) · Rot: {c.rotation}°</span>
-                  <span className="text-emerald-400 font-mono font-semibold">
-                    {c.length.toFixed(2)}m × {c.width.toFixed(2)}m
-                  </span>
+                {/* Length Selector on Card */}
+                <div className="mb-2">
+                  <span className="text-[10px] text-slate-400 block mb-1">Largo de la Caja:</span>
+                  <div className="grid grid-cols-3 gap-1">
+                    {[1.60, 1.80, 2.00].map((len) => {
+                      const active = Math.abs(c.length - len) < 0.05;
+                      return (
+                        <button
+                          key={len}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCheckoutLength(idx, len);
+                          }}
+                          className={`py-1 rounded text-[11px] font-bold transition-all cursor-pointer ${
+                            active
+                              ? 'bg-emerald-500 text-slate-950 font-black'
+                              : 'bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800'
+                          }`}
+                        >
+                          {len.toFixed(2)}m
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Side Selector on Card */}
+                <div>
+                  <span className="text-[10px] text-slate-400 block mb-1">Lado del Cajero:</span>
+                  <div className="grid grid-cols-2 gap-1">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCheckoutSide(idx, 'derecha');
+                      }}
+                      className={`py-1 px-1.5 rounded text-[11px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                        curSide === 'derecha'
+                          ? 'bg-emerald-500 text-slate-950 font-black'
+                          : 'bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800'
+                      }`}
+                    >
+                      <span>👉 Derecha</span>
+                      {curSide === 'derecha' && <Check className="w-3 h-3 stroke-[3]" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCheckoutSide(idx, 'izquierda');
+                      }}
+                      className={`py-1 px-1.5 rounded text-[11px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                        curSide === 'izquierda'
+                          ? 'bg-emerald-500 text-slate-950 font-black'
+                          : 'bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800'
+                      }`}
+                    >
+                      <span>👈 Izquierda</span>
+                      {curSide === 'izquierda' && <Check className="w-3 h-3 stroke-[3]" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-2 text-[10px] text-slate-400 flex justify-between items-center pt-1.5 border-t border-slate-800/60">
+                  <span>Pos: ({c.x.toFixed(1)}m, {c.z.toFixed(1)}m)</span>
+                  <span>Rotación: {c.rotation}°</span>
                 </div>
               </div>
             );

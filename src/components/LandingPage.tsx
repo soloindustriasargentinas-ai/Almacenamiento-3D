@@ -15,7 +15,8 @@ import {
   Boxes, 
   Check,
   Store,
-  ShieldAlert 
+  ShieldAlert,
+  LogOut
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -25,7 +26,7 @@ interface LandingPageProps {
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onGoToAdmin, onGoTo3D }) => {
-  const { user, profile, signInWithGoogle, signInAsGuest, loading } = useAuth();
+  const { user, profile, signInWithGoogle, signInAsGuest, loading, signOut } = useAuth();
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [guestName, setGuestName] = useState('');
@@ -106,17 +107,27 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGoToAdmin, onGoTo3D 
               <div className="flex items-center gap-2">
                 <button
                   onClick={onGoToAdmin}
-                  className="px-4 py-2 text-sm font-semibold rounded-lg bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-600/30 transition-all flex items-center gap-2"
+                  className="px-4 py-2 text-sm font-semibold rounded-lg bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-600/30 transition-all flex items-center gap-2 cursor-pointer"
                 >
                   <FolderKanban className="w-4 h-4" />
                   <span>Mi Panel Admin</span>
                 </button>
                 <button
                   onClick={onGoTo3D}
-                  className="px-4 py-2 text-sm font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all flex items-center gap-2"
+                  className="px-4 py-2 text-sm font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all flex items-center gap-2 cursor-pointer"
                 >
                   <Eye className="w-4 h-4 text-emerald-400" />
                   <span className="hidden sm:inline">Visualizador 3D</span>
+                </button>
+                <button
+                  onClick={async () => {
+                    await signOut();
+                  }}
+                  className="px-3 py-2 text-sm font-semibold rounded-lg bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-800/60 transition-all flex items-center gap-1.5 cursor-pointer"
+                  title="Cerrar Sesión de Usuario"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span className="hidden sm:inline">Cerrar Sesión</span>
                 </button>
               </div>
             ) : (

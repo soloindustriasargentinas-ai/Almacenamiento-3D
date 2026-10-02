@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ActiveTab, AppState, SelectionState, ViewMode, MetaConfig, Bounds3D, WorkspaceSection } from './types';
+import { ActiveTab, AppState, SelectionState, ViewMode, MetaConfig, Bounds3D, WorkspaceSection, CheckoutCounter } from './types';
 import { Sidebar } from './components/Sidebar';
 import { Viewport3D } from './components/Viewport3D';
 import { FloatingInfo } from './components/FloatingInfo';
@@ -45,10 +45,22 @@ import {
   Eye,
   Store,
   Building2,
+  LogOut,
+  Sun,
+  Ruler,
 } from 'lucide-react';
 
 export default function App() {
-  const { user, profile } = useAuth();
+  const { user, profile, signOut } = useAuth();
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+    } catch (e) {
+      console.error('Error cerrando sesión:', e);
+    }
+    setScreen('landing');
+  };
 
   // Navigation Screen: 'landing' | 'admin' | 'visualizer'
   const [screen, setScreen] = useState<'landing' | 'admin' | 'visualizer'>('landing');
@@ -198,7 +210,7 @@ export default function App() {
     heladeras: [
       {
         id: 2,
-        x: 6.0,
+        x: 5.5,
         z: 1.0,
         rotation: 0,
         type: 'mural_vidrio',
@@ -206,6 +218,19 @@ export default function App() {
         depth: 0.85,
         height: 2.00,
         color: 'negro',
+        doorsCount: 3,
+        illuminated: true,
+      },
+      {
+        id: 201,
+        x: 7.8,
+        z: 1.0,
+        rotation: 0,
+        type: 'mostrador',
+        width: 2.00,
+        depth: 0.95,
+        height: 1.25,
+        color: 'inox',
         doorsCount: 3,
         illuminated: true,
       },
@@ -217,7 +242,7 @@ export default function App() {
         z: 6.5,
         rotation: 0,
         type: 'estandar',
-        length: 2.20,
+        length: 1.80,
         width: 1.10,
         height: 0.88,
         scannerSide: 'derecha',
@@ -502,6 +527,15 @@ export default function App() {
 
       if (newX === cur.x && newZ === cur.z) return prev;
       checkouts[idx] = { ...cur, x: newX, z: newZ };
+      return { ...prev, checkouts };
+    });
+  }, []);
+
+  const handleUpdateCheckout = useCallback((idx: number, patch: Partial<CheckoutCounter>) => {
+    setState((prev) => {
+      const checkouts = [...(prev.checkouts || [])];
+      if (!checkouts[idx]) return prev;
+      checkouts[idx] = { ...checkouts[idx], ...patch };
       return { ...prev, checkouts };
     });
   }, []);
@@ -1196,11 +1230,39 @@ export default function App() {
             <span className="hidden md:inline">Exportar</span>
           </button>
 
+          {/* Sombras & Cotas Quick Toggles */}
+          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
+            <button
+              onClick={() => setState((p) => ({ ...p, showShadows: !p.showShadows }))}
+              className={`px-2.5 py-1 rounded-md font-bold text-[11px] flex items-center gap-1.5 transition-all cursor-pointer ${
+                state.showShadows
+                  ? 'bg-amber-500 text-slate-950 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+              }`}
+              title="Activar/Desactivar Sombras y Luces 3D"
+            >
+              <Sun className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Sombras</span>
+            </button>
+            <button
+              onClick={() => setState((p) => ({ ...p, showDims: !p.showDims }))}
+              className={`px-2.5 py-1 rounded-md font-bold text-[11px] flex items-center gap-1.5 transition-all cursor-pointer ${
+                state.showDims
+                  ? 'bg-cyan-500 text-slate-950 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+              }`}
+              title="Activar/Desactivar Cotas y Medidas de Longitud"
+            >
+              <Ruler className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Cotas</span>
+            </button>
+          </div>
+
           {/* View Mode Quick Buttons */}
-          <div className="hidden lg:flex items-center bg-slate-950 p-1 rounded-lg border border-slate-800 text-[11px]">
+          <div className="hidden xl:flex items-center bg-slate-950 p-1 rounded-lg border border-slate-800 text-[11px]">
             <button
               onClick={() => setState((p) => ({ ...p, viewMode: 'standard' }))}
-              className={`px-2 py-0.5 rounded font-medium transition-colors ${
+              className={`px-2 py-0.5 rounded font-medium transition-colors cursor-pointer ${
                 state.viewMode === 'standard' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -1208,7 +1270,7 @@ export default function App() {
             </button>
             <button
               onClick={() => setState((p) => ({ ...p, viewMode: 'realistic' }))}
-              className={`px-2 py-0.5 rounded font-medium transition-colors ${
+              className={`px-2 py-0.5 rounded font-medium transition-colors cursor-pointer ${
                 state.viewMode === 'realistic' ? 'bg-amber-600 text-white' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -1216,7 +1278,7 @@ export default function App() {
             </button>
             <button
               onClick={() => setState((p) => ({ ...p, viewMode: 'wireframe' }))}
-              className={`px-2 py-0.5 rounded font-medium transition-colors ${
+              className={`px-2 py-0.5 rounded font-medium transition-colors cursor-pointer ${
                 state.viewMode === 'wireframe' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -1235,6 +1297,15 @@ export default function App() {
             title={sidebarOpen ? 'Ocultar panel lateral (Modo 3D Total)' : 'Mostrar panel de herramientas'}
           >
             {sidebarOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
+          </button>
+
+          {/* Cerrar Sesión Button */}
+          <button
+            onClick={handleLogout}
+            className="p-2 rounded-lg text-xs font-bold bg-slate-800 hover:bg-rose-950/70 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-800/60 transition-all cursor-pointer"
+            title="Cerrar Sesión y Salir al Inicio"
+          >
+            <LogOut className="w-4 h-4" />
           </button>
         </div>
       </header>
@@ -1275,6 +1346,8 @@ export default function App() {
             onMoveDoor={handleMoveDoor}
             onMoveHeavyRack={handleMoveHeavyRack}
             onSetViewMode={(mode) => setState((prev) => ({ ...prev, viewMode: mode }))}
+            onToggleShadows={() => setState((prev) => ({ ...prev, showShadows: !prev.showShadows }))}
+            onToggleDims={() => setState((prev) => ({ ...prev, showDims: !prev.showDims }))}
           />
 
           {/* If sidebar is collapsed, quick open button floating on top left of viewport */}
@@ -1297,6 +1370,7 @@ export default function App() {
             onRotate={handleRotateSelected}
             onDelete={handleDeleteSelected}
             onSetGondolaCentralModuleHeight={handleSetGondolaCentralModuleHeight}
+            onUpdateCheckout={handleUpdateCheckout}
           />
 
           {/* Collision / Limit Notification Toast */}
