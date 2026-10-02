@@ -27,10 +27,12 @@ import firebaseConfig from '../../firebase-applet-config.json';
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// CRITICAL: Must pass database ID as argument per Firebase Skill, and enable auto-detect long polling for robust connection
+// CRITICAL: Must pass database ID as argument per Firebase Skill, and force long polling to prevent WebSocket connection failures in iframe/preview environments
 export const db = initializeFirestore(
   app, 
-  { experimentalAutoDetectLongPolling: true }, 
+  { 
+    experimentalForceLongPolling: true,
+  }, 
   firebaseConfig.firestoreDatabaseId
 );
 export const auth = getAuth(app);
