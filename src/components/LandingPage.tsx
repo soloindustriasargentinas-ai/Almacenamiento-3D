@@ -22,7 +22,7 @@ import { useAuth } from '../context/AuthContext';
 
 interface LandingPageProps {
   onGoToAdmin: () => void;
-  onGoTo3D: () => void;
+  onGoTo3D: (section?: 'salon' | 'deposito') => void;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onGoToAdmin, onGoTo3D }) => {
@@ -102,28 +102,41 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGoToAdmin, onGoTo3D 
             <a href="#pricing" className="hover:text-blue-400 transition-colors">Suscripciones</a>
           </nav>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            {/* Quick 3D access to both options */}
+            <div className="hidden lg:flex items-center gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-slate-800">
+              <button
+                onClick={() => onGoTo3D('salon')}
+                className="px-3 py-1.5 text-xs font-bold rounded-lg bg-rose-950/70 hover:bg-rose-900/80 text-rose-300 border border-rose-800/60 transition-all flex items-center gap-1.5 cursor-pointer"
+                title="Diseñar Salón Comercial en 3D"
+              >
+                <Store className="w-3.5 h-3.5" />
+                <span>Salón 3D</span>
+              </button>
+              <button
+                onClick={() => onGoTo3D('deposito')}
+                className="px-3 py-1.5 text-xs font-bold rounded-lg bg-blue-950/70 hover:bg-blue-900/80 text-blue-300 border border-blue-800/60 transition-all flex items-center gap-1.5 cursor-pointer"
+                title="Diseñar Depósito Industrial en 3D"
+              >
+                <Building2 className="w-3.5 h-3.5" />
+                <span>Depósito 3D</span>
+              </button>
+            </div>
+
             {user ? (
               <div className="flex items-center gap-2">
                 <button
                   onClick={onGoToAdmin}
-                  className="px-4 py-2 text-sm font-semibold rounded-lg bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-600/30 transition-all flex items-center gap-2 cursor-pointer"
+                  className="px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-lg bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-600/30 transition-all flex items-center gap-2 cursor-pointer"
                 >
                   <FolderKanban className="w-4 h-4" />
                   <span>Mi Panel Admin</span>
                 </button>
                 <button
-                  onClick={onGoTo3D}
-                  className="px-4 py-2 text-sm font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all flex items-center gap-2 cursor-pointer"
-                >
-                  <Eye className="w-4 h-4 text-emerald-400" />
-                  <span className="hidden sm:inline">Visualizador 3D</span>
-                </button>
-                <button
                   onClick={async () => {
                     await signOut();
                   }}
-                  className="px-3 py-2 text-sm font-semibold rounded-lg bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-800/60 transition-all flex items-center gap-1.5 cursor-pointer"
+                  className="px-3 py-2 text-xs sm:text-sm font-semibold rounded-lg bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-800/60 transition-all flex items-center gap-1.5 cursor-pointer"
                   title="Cerrar Sesión de Usuario"
                 >
                   <LogOut className="w-4 h-4" />
@@ -161,7 +174,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGoToAdmin, onGoTo3D 
           <div className="text-center max-w-3xl mx-auto">
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-950/80 border border-blue-700/60 text-blue-300 text-xs font-medium mb-4 backdrop-blur-sm">
               <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
-              <span>1 Única Suscripción Unificada: Acceso Total a Salón y Depósito</span>
+              <span>Plataforma Profesional con 2 Entornos Especializados Separados</span>
             </div>
 
             <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-white leading-tight">
@@ -169,38 +182,124 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGoToAdmin, onGoTo3D 
             </h1>
 
             <p className="mt-4 text-base sm:text-lg text-slate-300 max-w-2xl mx-auto leading-relaxed">
-              La plataforma se divide en <strong>2 secciones especializadas</strong> con menús de comando adaptados: <strong>Salón Comercial</strong> (góndolas, punteras, heladeras, check outs) y <strong>Depósito Industrial</strong> (racks pesados para pallets, miniracks, estanterías, portones).
+              Elige tu espacio de trabajo. Cada opción cuenta con su propio entorno 3D, catálogo de equipamiento exacto, cálculos estructurales y planos de exportación independientes:
             </p>
 
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5">
-              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-rose-950/70 border border-rose-700/60 text-rose-200 text-xs font-semibold">
-                <Store className="w-4 h-4 text-rose-400" />
-                <span>Salón: Góndolas Pared y Central, Punteras, Heladeras, Check Outs</span>
+            {/* LAS 2 OPCIONES: SALÓN COMERCIAL O DEPÓSITO INDUSTRIAL */}
+            <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-5 text-left">
+              {/* Opción 1: Salón Comercial */}
+              <div className="p-6 rounded-2xl bg-gradient-to-b from-rose-950/50 via-slate-900/90 to-slate-950 border-2 border-rose-500/60 hover:border-rose-400 transition-all shadow-xl shadow-rose-950/40 flex flex-col justify-between group hover:scale-[1.01]">
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-12 h-12 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-300 flex items-center justify-center">
+                      <Store className="w-6 h-6" />
+                    </div>
+                    <span className="px-3 py-1 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs font-extrabold uppercase tracking-wider">
+                      Opción 1
+                    </span>
+                  </div>
+
+                  <h3 className="text-xl font-bold text-white mb-2 group-hover:text-rose-200 transition-colors">
+                    Salón Comercial y Retail
+                  </h3>
+
+                  <p className="text-xs text-slate-300 leading-relaxed mb-4">
+                    Diseño integral de salones de venta, supermercados y autoservicios:
+                  </p>
+
+                  <ul className="space-y-1.5 text-xs text-slate-300 mb-6 font-medium">
+                    <li className="flex items-center gap-2">
+                      <Check className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                      <span>Góndolas de Pared y Centrales (doble faz)</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Check className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                      <span>Punteras con encastre inteligente</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Check className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                      <span>Heladeras Comerciales (murales, mostradores vitrina, islas)</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Check className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                      <span>Cajas de Cobro Check Out (1.60m, 1.80m, 2.00m con cajero izq/der)</span>
+                    </li>
+                  </ul>
+                </div>
+
+                <button
+                  onClick={() => onGoTo3D('salon')}
+                  className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-bold text-sm shadow-lg shadow-rose-900/50 flex items-center justify-center gap-2 cursor-pointer transition-all group-hover:shadow-rose-600/40"
+                >
+                  <Eye className="w-4 h-4" />
+                  <span>Diseñar Salón Comercial</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
               </div>
-              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-blue-950/70 border border-blue-700/60 text-blue-200 text-xs font-semibold">
-                <Building2 className="w-4 h-4 text-blue-400" />
-                <span>Depósito: Racks Pesados, Racks Livianos, Estanterías, Portones</span>
+
+              {/* Opción 2: Depósito Industrial */}
+              <div className="p-6 rounded-2xl bg-gradient-to-b from-blue-950/50 via-slate-900/90 to-slate-950 border-2 border-blue-500/60 hover:border-blue-400 transition-all shadow-xl shadow-blue-950/40 flex flex-col justify-between group hover:scale-[1.01]">
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-12 h-12 rounded-xl bg-blue-500/20 border border-blue-500/40 text-blue-300 flex items-center justify-center">
+                      <Building2 className="w-6 h-6" />
+                    </div>
+                    <span className="px-3 py-1 rounded-full bg-blue-500/20 border border-blue-500/40 text-blue-300 text-xs font-extrabold uppercase tracking-wider">
+                      Opción 2
+                    </span>
+                  </div>
+
+                  <h3 className="text-xl font-bold text-white mb-2 group-hover:text-blue-200 transition-colors">
+                    Depósito y Logística Industrial
+                  </h3>
+
+                  <p className="text-xs text-slate-300 leading-relaxed mb-4">
+                    Planificación y distribución para centros de distribución y depósitos:
+                  </p>
+
+                  <ul className="space-y-1.5 text-xs text-slate-300 mb-6 font-medium">
+                    <li className="flex items-center gap-2">
+                      <Check className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                      <span>Racks Pesados Selectivos para Pallets (hasta 6m altura)</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Check className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                      <span>Miniracks Livianos de Picking Manual (módulos 1.5m, 1.8m, 2.1m)</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Check className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                      <span>Estanterías Metálicas Modulares para cajas y archivo</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Check className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                      <span>Portones Industriales Seccionales para carga y autoelevadores</span>
+                    </li>
+                  </ul>
+                </div>
+
+                <button
+                  onClick={() => onGoTo3D('deposito')}
+                  className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-sm shadow-lg shadow-blue-900/50 flex items-center justify-center gap-2 cursor-pointer transition-all group-hover:shadow-blue-600/40"
+                >
+                  <Eye className="w-4 h-4" />
+                  <span>Diseñar Depósito Industrial</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
               </div>
             </div>
 
+            {/* Acceso Secundario a Administración */}
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
               <button
                 onClick={() => {
                   if (user) onGoToAdmin();
                   else setShowLoginModal(true);
                 }}
-                className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-base shadow-xl shadow-blue-500/25 transition-all flex items-center justify-center gap-2 group cursor-pointer"
+                className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 font-medium text-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <span>Acceder al Panel Admin</span>
-                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-              </button>
-
-              <button
-                onClick={onGoTo3D}
-                className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-slate-700 font-semibold text-base transition-all flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <Eye className="w-5 h-5 text-emerald-400" />
-                <span>Explorar Visualizador 3D</span>
+                <FolderKanban className="w-4 h-4 text-amber-400" />
+                <span>Administrar Proyectos Guardados en Base de Datos</span>
+                <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
 

@@ -54,12 +54,15 @@ export const SaveModal: React.FC<SaveModalProps> = ({
     const summary = calculateSummary(state);
     const serializedState = JSON.stringify({ ...state, meta: updatedMeta });
 
+    const isSalon = state.activeSection === 'salon';
+    const workspaceTitle = isSalon ? 'Salón Comercial y Retail' : 'Depósito y Logística Industrial';
+
     const htmlContent = `<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>${cliente} - Plano ${nroPlano} | Titufaris</title>
+<title>${cliente} - Plano ${nroPlano} | ${workspaceTitle}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:system-ui,-apple-system,sans-serif;background:#090d16;color:#f1f5f9;padding:24px}
@@ -79,41 +82,63 @@ export const SaveModal: React.FC<SaveModalProps> = ({
 </head>
 <body>
 <div class="card">
-  <h1>Configuración 3D de Racks y Góndolas</h1>
+  <h1>${workspaceTitle} - Especificación Técnica 3D</h1>
   <div class="sub">Cliente: <strong>${cliente}</strong> &nbsp;·&nbsp; Plano: <strong>${nroPlano}</strong> &nbsp;·&nbsp; Fecha: <strong>${fecha}</strong></div>
   
   <div class="grid">
-    <div class="stat"><div class="stat-lbl">Bastidores Minirack</div><div class="stat-val">${summary.minirackBastidores}</div></div>
-    <div class="stat"><div class="stat-lbl">Paneles Minirack</div><div class="stat-val">${summary.minirackPaneles}</div></div>
-    <div class="stat"><div class="stat-lbl">Ángulos Estantería</div><div class="stat-val">${summary.estanteriaAngulos}</div></div>
-    <div class="stat"><div class="stat-lbl">Bandejas Estantería</div><div class="stat-val">${summary.estanteriaBandejas}</div></div>
-    <div class="stat"><div class="stat-lbl">Bandejas Góndola Pared</div><div class="stat-val">${summary.gondolaParedBandejas}</div></div>
-    <div class="stat"><div class="stat-lbl">Bandejas Góndola Central</div><div class="stat-val">${summary.gondolaCentralBandejas}</div></div>
+    ${isSalon ? `
+      <div class="stat"><div class="stat-lbl">Bandejas Góndola Pared</div><div class="stat-val">${summary.gondolaParedBandejas}</div></div>
+      <div class="stat"><div class="stat-lbl">Bandejas Góndola Central</div><div class="stat-val">${summary.gondolaCentralBandejas}</div></div>
+      <div class="stat"><div class="stat-lbl">Punteras de Góndola</div><div class="stat-val">${summary.punterasCount} (${summary.punterasBandejas} bandejas)</div></div>
+      <div class="stat"><div class="stat-lbl">Heladeras Comerciales</div><div class="stat-val">${summary.heladerasCount} uds.</div></div>
+      <div class="stat"><div class="stat-lbl">Cajas Check Out</div><div class="stat-val">${summary.checkoutsCount} cajas</div></div>
+      <div class="stat"><div class="stat-lbl">Puertas de Vidrio</div><div class="stat-val">${summary.puertasCount} uds.</div></div>
+    ` : `
+      <div class="stat"><div class="stat-lbl">Posiciones Pallets (Racks Pesados)</div><div class="stat-val">${summary.heavyRackPallets} pallets</div></div>
+      <div class="stat"><div class="stat-lbl">Bastidores Racks Pesados</div><div class="stat-val">${summary.heavyRackBastidores}</div></div>
+      <div class="stat"><div class="stat-lbl">Bastidores Minirack</div><div class="stat-val">${summary.minirackBastidores}</div></div>
+      <div class="stat"><div class="stat-lbl">Paneles Minirack</div><div class="stat-val">${summary.minirackPaneles}</div></div>
+      <div class="stat"><div class="stat-lbl">Ángulos Estantería</div><div class="stat-val">${summary.estanteriaAngulos}</div></div>
+      <div class="stat"><div class="stat-lbl">Bandejas Estantería</div><div class="stat-val">${summary.estanteriaBandejas}</div></div>
+    `}
     <div class="stat hi" style="grid-column:1/-1">
-      <div class="stat-lbl">Carga Máxima de Exhibición Combinada</div>
+      <div class="stat-lbl">Carga Máxima de Almacenamiento / Exhibición Estimada</div>
       <div class="stat-val">${summary.cargaTotalKg.toLocaleString()} kg</div>
     </div>
   </div>
 
-  <div class="sec-title">Detalle de Líneas Miniracks</div>
-  <ul>
-    ${state.lines.map((l, i) => `<li>• Línea ${i + 1}: ${l.modules.length} módulos (${l.modules.map(m => m.bl + 'm').join(' + ')}) = <strong>${realMinirackLineWidth(l).toFixed(2)}m</strong> total</li>`).join('') || '<li>Sin miniracks</li>'}
-  </ul>
+  ${isSalon ? `
+    <div class="sec-title">Detalle de Góndolas de Pared</div>
+    <ul>
+      ${state.gondolaPared?.lines?.map((l, i) => `<li>• Línea ${i + 1}: ${l.modules.length} módulos (${l.modules.map(m => m.bl + 'm').join(' + ')}) = <strong>${realGondolaParedLineWidth(l).toFixed(2)}m</strong> total</li>`).join('') || '<li>Sin góndolas de pared</li>'}
+    </ul>
 
-  <div class="sec-title">Detalle de Líneas Estanterías</div>
-  <ul>
-    ${state.shelfLines.map((l, i) => `<li>• Línea ${i + 1}: ${l.modules.length} módulos (${l.modules.map(m => m.bl + 'm').join(' + ')}) = <strong>${realShelfLineWidth(l).toFixed(2)}m</strong> total</li>`).join('') || '<li>Sin estanterías</li>'}
-  </ul>
+    <div class="sec-title">Detalle de Góndolas Centrales (Doble Faz)</div>
+    <ul>
+      ${state.gondolaCentral?.lines?.map((l, i) => `<li>• Línea ${i + 1}: ${l.modules.length} módulos (${l.modules.map(m => m.bl + 'm').join(' + ')}) = <strong>${realGondolaCentralLineWidth(l).toFixed(2)}m</strong> total</li>`).join('') || '<li>Sin góndolas centrales</li>'}
+    </ul>
 
-  <div class="sec-title">Detalle de Góndolas de Pared</div>
-  <ul>
-    ${state.gondolaPared.lines.map((l, i) => `<li>• Línea ${i + 1}: ${l.modules.length} módulos (${l.modules.map(m => m.bl + 'm').join(' + ')}) = <strong>${realGondolaParedLineWidth(l).toFixed(2)}m</strong> total</li>`).join('') || '<li>Sin góndolas de pared</li>'}
-  </ul>
+    <div class="sec-title">Heladeras y Cajas Check Out</div>
+    <ul>
+      ${state.heladeras?.map((h, i) => `<li>• Heladera ${i + 1}: ${h.type} (${h.width}m x ${h.depth}m)</li>`).join('') || '<li>Sin heladeras</li>'}
+      ${state.checkouts?.map((c, i) => `<li>• Check Out ${i + 1}: ${c.length}m (Lado cajero: ${c.scannerSide || 'derecha'})</li>`).join('') || '<li>Sin checkouts</li>'}
+    </ul>
+  ` : `
+    <div class="sec-title">Detalle de Racks Pesados (Selectivos para Pallets)</div>
+    <ul>
+      ${state.heavyRacks?.lines?.map((l, i) => `<li>• Batería ${i + 1}: ${l.modules.length} módulos (${l.modules.map(m => m.bl + 'm').join(' + ')})</li>`).join('') || '<li>Sin racks pesados</li>'}
+    </ul>
 
-  <div class="sec-title">Detalle de Góndolas Centrales (Doble Faz)</div>
-  <ul>
-    ${state.gondolaCentral.lines.map((l, i) => `<li>• Línea ${i + 1}: ${l.modules.length} módulos (${l.modules.map(m => m.bl + 'm').join(' + ')}) = <strong>${realGondolaCentralLineWidth(l).toFixed(2)}m</strong> total</li>`).join('') || '<li>Sin góndolas centrales</li>'}
-  </ul>
+    <div class="sec-title">Detalle de Líneas Miniracks</div>
+    <ul>
+      ${state.lines?.map((l, i) => `<li>• Línea ${i + 1}: ${l.modules.length} módulos (${l.modules.map(m => m.bl + 'm').join(' + ')}) = <strong>${realMinirackLineWidth(l).toFixed(2)}m</strong> total</li>`).join('') || '<li>Sin miniracks</li>'}
+    </ul>
+
+    <div class="sec-title">Detalle de Líneas Estanterías Metálicas</div>
+    <ul>
+      ${state.shelfLines?.map((l, i) => `<li>• Línea ${i + 1}: ${l.modules.length} módulos (${l.modules.map(m => m.bl + 'm').join(' + ')}) = <strong>${realShelfLineWidth(l).toFixed(2)}m</strong> total</li>`).join('') || '<li>Sin estanterías</li>'}
+    </ul>
+  `}
 </div>
 <script>
   window.__APP_DATA__ = ${serializedState};

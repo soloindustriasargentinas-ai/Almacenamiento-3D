@@ -8,6 +8,7 @@ import { LandingPage } from './components/LandingPage';
 import { AdminDashboard } from './components/AdminDashboard';
 import { useAuth } from './context/AuthContext';
 import { DbProject, saveProject, calculateProjectStats } from './services/dbService';
+import { createDefaultSalonState, createDefaultDepositoState } from './utils/templates';
 import {
   clampObstacleToWarehouse,
   getDoorBounds,
@@ -83,215 +84,37 @@ export default function App() {
     }, 2800);
   }, []);
 
-  // Global Integrated 3D Layout State
-  const [state, setState] = useState<AppState>({
-    activeSection: 'salon',
+  // Independent workspace state caches to prevent mixing Salón and Depósito
+  const salonStateRef = useRef<AppState>(createDefaultSalonState());
+  const depositoStateRef = useRef<AppState>(createDefaultDepositoState());
 
-    // 1. Miniracks (Racks Livianos)
-    height: 2.4,
-    depth: 0.6,
-    shelfCount: 3,
-    lines: [
-      {
-        xOff: 1.0,
-        zOff: 1.0,
-        rotation: 0,
-        modules: [
-          { bl: 1.5, sc: 3 },
-          { bl: 1.5, sc: 3 },
-        ],
-      },
-    ],
+  // Global 3D State initialized cleanly to Salón Comercial
+  const [state, setState] = useState<AppState>(() => createDefaultSalonState());
 
-    // 1.b Racks Pesados (Selectivos para pallets)
-    heavyRacks: {
-      height: 4.5,
-      depth: 1.10,
-      defaultLevels: 3,
-      lines: [
-        {
-          xOff: 1.0,
-          zOff: 4.0,
-          rotation: 0,
-          height: 4.5,
-          depth: 1.10,
-          modules: [
-            { bl: 2.70, levels: 3, capPerLevel: 2400 },
-            { bl: 2.70, levels: 3, capPerLevel: 2400 },
-          ],
-        },
-      ],
-    },
+  // Switch between Salón and Depósito workspaces cleanly
+  const handleSwitchSection = useCallback((newSection: 'salon' | 'deposito') => {
+    setState((prev) => {
+      if (prev.activeSection === newSection) return prev;
 
-    // 2. Estanterías
-    shelfHeight: 2.0,
-    shelfDepth: 0.42,
-    shelfLevels: 5,
-    shelfCapacity: 100,
-    shelfLines: [
-      {
-        xOff: 1.0,
-        zOff: 2.8,
-        rotation: 0,
-        modules: [
-          { bl: 0.9, sc: 5 },
-          { bl: 0.9, sc: 5 },
-        ],
-      },
-    ],
+      // Cache current state before switching
+      if (prev.activeSection === 'salon') {
+        salonStateRef.current = prev;
+      } else {
+        depositoStateRef.current = prev;
+      }
 
-    // 3. Góndolas de Pared
-    gondolaPared: {
-      height: 2.0,
-      depth: 0.47,
-      shelfCount: 5,
-      moduleLength: 1.0,
-      lines: [
-        {
-          xOff: 1.0,
-          zOff: 1.0,
-          rotation: 0,
-          modules: [
-            { bl: 1.0, sc: 5, depth: 0.47 },
-            { bl: 1.0, sc: 5, depth: 0.47 },
-          ],
-        },
-      ],
-    },
+      // Retrieve cached or default state for the selected workspace
+      const targetState = newSection === 'salon' ? salonStateRef.current : depositoStateRef.current;
+      return {
+        ...targetState,
+        activeSection: newSection,
+      };
+    });
 
-    // 4. Góndolas Centrales (Doble Faz)
-    gondolaCentral: {
-      height: 1.6,
-      depth: 0.47,
-      shelfCount: 3,
-      moduleLength: 1.0,
-      lines: [
-        {
-          xOff: 1.0,
-          zOff: 4.0,
-          rotation: 0,
-          height: 1.6,
-          modules: [
-            {
-              bl: 1.0,
-              height: 1.6,
-              scA: 3,
-              scB: 3,
-              depthA: 0.47,
-              depthB: 0.47,
-            },
-            {
-              bl: 1.0,
-              height: 1.6,
-              scA: 3,
-              scB: 3,
-              depthA: 0.47,
-              depthB: 0.47,
-            },
-          ],
-        },
-      ],
-    },
-
-    // Salón Components
-    punteras: [
-      {
-        id: 1,
-        x: 3.04,
-        z: 4.02,
-        rotation: 90,
-        width: 0.90,
-        height: 1.60,
-        depth: 0.38,
-        shelfCount: 4,
-        attachedCentralIdx: 0,
-      },
-    ],
-    heladeras: [
-      {
-        id: 2,
-        x: 5.5,
-        z: 1.0,
-        rotation: 0,
-        type: 'mural_vidrio',
-        width: 1.80,
-        depth: 0.85,
-        height: 2.00,
-        color: 'negro',
-        doorsCount: 3,
-        illuminated: true,
-      },
-      {
-        id: 201,
-        x: 7.8,
-        z: 1.0,
-        rotation: 0,
-        type: 'mostrador',
-        width: 2.00,
-        depth: 0.95,
-        height: 1.25,
-        color: 'inox',
-        doorsCount: 3,
-        illuminated: true,
-      },
-    ],
-    checkouts: [
-      {
-        id: 3,
-        x: 6.0,
-        z: 6.5,
-        rotation: 0,
-        type: 'estandar',
-        length: 1.80,
-        width: 1.10,
-        height: 0.88,
-        scannerSide: 'derecha',
-        hasBelt: true,
-      },
-    ],
-    doors: [
-      {
-        id: 4,
-        x: 1.0,
-        z: 10.0,
-        rotation: 0,
-        section: 'salon',
-        type: 'vidrio_doble',
-        width: 2.00,
-        height: 2.20,
-      },
-    ],
-
-    // 5. Salón / Depósito & Obstáculos
-    warehouse: {
-      enabled: true,
-      width: 14.0,
-      depth: 12.0,
-      height: 4.5,
-      wallColor: '#1e40af',
-      wallOpacity: 0.3,
-    },
-    obstacles: [
-      { id: 101, type: 'column', x: 8.0, z: 4.0, w: 0.4, d: 0.4 },
-      { id: 102, type: 'opening', x: 0.0, z: 6.0, w: 2.2, fh: 2.6, rotation: 90 },
-    ],
-
-    // 6. View & Display Options
-    viewMode: 'standard',
-    lightIntensity: 1.0,
-    showDims: true,
-    showShelfDims: false,
-    showShadows: true,
-    showGrid: true,
-
-    // 7. Metadata
-    meta: {
-      cliente: '',
-      nroPlano: '',
-      fecha: new Date().toISOString().slice(0, 10),
-      whatsapp: '',
-    },
-  });
+    setActiveTab(newSection === 'salon' ? 'gondola-pared' : 'racks-livianos');
+    setSelection({ type: null, idx: null });
+    showNotification(newSection === 'salon' ? 'Espacio Comercial: Salón Activo' : 'Espacio Industrial: Depósito Activo');
+  }, [showNotification]);
 
   // Strict Movement Handlers: No product leaves the warehouse, no product overlaps another
   const handleMoveMinirack = useCallback((idx: number, x: number, z: number) => {
@@ -1082,7 +905,18 @@ export default function App() {
     return (
       <LandingPage
         onGoToAdmin={() => setScreen('admin')}
-        onGoTo3D={() => setScreen('visualizer')}
+        onGoTo3D={(section = 'salon') => {
+          if (section === 'salon') {
+            setState(salonStateRef.current || createDefaultSalonState());
+            setActiveTab('gondola-pared');
+          } else {
+            setState(depositoStateRef.current || createDefaultDepositoState());
+            setActiveTab('racks-livianos');
+          }
+          setActiveProject(null);
+          setSelection({ type: null, idx: null });
+          setScreen('visualizer');
+        }}
       />
     );
   }
@@ -1095,6 +929,13 @@ export default function App() {
           try {
             const parsed: AppState = JSON.parse(proj.warehouseState);
             setState(parsed);
+            if (parsed.activeSection === 'salon') {
+              salonStateRef.current = parsed;
+              setActiveTab('gondola-pared');
+            } else {
+              depositoStateRef.current = parsed;
+              setActiveTab('racks-livianos');
+            }
           } catch (e) {
             console.error('Error cargando estado:', e);
           }
@@ -1146,37 +987,31 @@ export default function App() {
 
           <div className="h-5 w-px bg-slate-800 mx-1 hidden sm:block" />
 
-          {/* Workspace Section Switcher in Header */}
+          {/* Workspace Section Switcher in Header: Salón vs Depósito */}
           <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
             <button
-              onClick={() => {
-                setState((p) => ({ ...p, activeSection: 'salon' }));
-                setActiveTab('gondola-pared');
-              }}
-              className={`px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
+              onClick={() => handleSwitchSection('salon')}
+              className={`px-3 py-1 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
                 state.activeSection === 'salon'
-                  ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-md shadow-rose-900/40'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-md shadow-rose-900/40 ring-1 ring-rose-400/50'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
               }`}
-              title="Sección Salón Comercial: Góndolas, Heladeras, Check Outs, Punteras"
+              title="Entorno Salón Comercial: Góndolas, Heladeras, Check Outs, Punteras"
             >
               <Store className="w-3.5 h-3.5 text-rose-200" />
-              <span>Salón</span>
+              <span>Salón Comercial</span>
             </button>
             <button
-              onClick={() => {
-                setState((p) => ({ ...p, activeSection: 'deposito' }));
-                setActiveTab('racks-livianos');
-              }}
-              className={`px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
+              onClick={() => handleSwitchSection('deposito')}
+              className={`px-3 py-1 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
                 state.activeSection === 'deposito'
-                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-900/40'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-900/40 ring-1 ring-blue-400/50'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
               }`}
-              title="Sección Depósito Industrial: Racks Livianos, Racks Pesados, Estanterías, Portones"
+              title="Entorno Depósito Industrial: Racks Livianos, Racks Pesados, Estanterías, Portones"
             >
               <Building2 className="w-3.5 h-3.5 text-blue-200" />
-              <span>Depósito</span>
+              <span>Depósito Industrial</span>
             </button>
           </div>
 
@@ -1325,6 +1160,7 @@ export default function App() {
               onOpenSaveDialog={(act) => setSaveDialogAction(act)}
               onPrintPDF={handlePrintPDF}
               onSetGondolaCentralModuleHeight={handleSetGondolaCentralModuleHeight}
+              onSwitchSection={handleSwitchSection}
             />
           </div>
         )}

@@ -523,146 +523,172 @@ export function computeBeamMultiplier(bl: number): number {
 }
 
 export function calculateSummary(state: AppState): MaterialsSummary {
-  // 1. Miniracks (Racks Livianos)
+  const isSalon = state.activeSection === 'salon';
+
+  // 1. Miniracks (Racks Livianos) - Only in Depósito
   const minirackVigas: Record<number, number> = {};
   let minirackBastidores = 0;
   let minirackPaneles = 0;
   let minirackCargaKg = 0;
 
-  (state.lines || []).forEach((l) => {
-    minirackBastidores += l.modules.length + 1;
-    l.modules.forEach((m) => {
-      const sc = m.sc ?? state.shelfCount;
-      minirackVigas[m.bl] = (minirackVigas[m.bl] || 0) + sc * 2;
-      minirackPaneles += sc * computeBeamMultiplier(m.bl);
-      minirackCargaKg += sc * 400; // 400 kg per shelf tier
+  if (!isSalon) {
+    (state.lines || []).forEach((l) => {
+      minirackBastidores += l.modules.length + 1;
+      l.modules.forEach((m) => {
+        const sc = m.sc ?? state.shelfCount;
+        minirackVigas[m.bl] = (minirackVigas[m.bl] || 0) + sc * 2;
+        minirackPaneles += sc * computeBeamMultiplier(m.bl);
+        minirackCargaKg += sc * 400; // 400 kg per shelf tier
+      });
     });
-  });
+  }
 
-  // 1.b Racks Pesados (Selectivos)
+  // 1.b Racks Pesados (Selectivos para pallets) - Only in Depósito
   const heavyRackVigas: Record<number, number> = {};
   let heavyRackBastidores = 0;
   let heavyRackPallets = 0;
   let heavyRackCargaKg = 0;
 
-  (state.heavyRacks?.lines || []).forEach((l) => {
-    heavyRackBastidores += l.modules.length + 1;
-    l.modules.forEach((m) => {
-      const lev = m.levels || 3;
-      heavyRackVigas[m.bl] = (heavyRackVigas[m.bl] || 0) + lev * 2;
-      const palletsPerLevel = m.bl >= 3.0 ? 4 : m.bl >= 2.5 ? 3 : 2;
-      heavyRackPallets += lev * palletsPerLevel;
-      heavyRackCargaKg += lev * (m.capPerLevel || 2000);
+  if (!isSalon) {
+    (state.heavyRacks?.lines || []).forEach((l) => {
+      heavyRackBastidores += l.modules.length + 1;
+      l.modules.forEach((m) => {
+        const lev = m.levels || 3;
+        heavyRackVigas[m.bl] = (heavyRackVigas[m.bl] || 0) + lev * 2;
+        const palletsPerLevel = m.bl >= 3.0 ? 4 : m.bl >= 2.5 ? 3 : 2;
+        heavyRackPallets += lev * palletsPerLevel;
+        heavyRackCargaKg += lev * (m.capPerLevel || 2000);
+      });
     });
-  });
+  }
 
-  // 2. Estanterías
+  // 2. Estanterías Metálicas - Only in Depósito
   const estanteriaModulos: Record<number, number> = {};
   let estanteriaAngulos = 0;
   let estanteriaBandejas = 0;
   let estanteriaCargaKg = 0;
   const defaultCap = state.shelfCapacity || 100;
 
-  (state.shelfLines || []).forEach((sl) => {
-    estanteriaAngulos += 4 + (sl.modules.length - 1) * 2;
-    sl.modules.forEach((m) => {
-      const sc = m.sc ?? state.shelfLevels;
-      estanteriaModulos[m.bl] = (estanteriaModulos[m.bl] || 0) + sc;
-      estanteriaBandejas += sc;
-      estanteriaCargaKg += sc * (m.cap ?? defaultCap);
+  if (!isSalon) {
+    (state.shelfLines || []).forEach((sl) => {
+      estanteriaAngulos += 4 + (sl.modules.length - 1) * 2;
+      sl.modules.forEach((m) => {
+        const sc = m.sc ?? state.shelfLevels;
+        estanteriaModulos[m.bl] = (estanteriaModulos[m.bl] || 0) + sc;
+        estanteriaBandejas += sc;
+        estanteriaCargaKg += sc * (m.cap ?? defaultCap);
+      });
     });
-  });
+  }
 
-  // 3. Góndolas Pared
+  // 3. Góndolas Pared - Only in Salón
   let gondolaParedColumnas = 0;
   let gondolaParedBandejas = 0;
   let gondolaParedMensulas = 0;
   let gondolaParedCargaKg = 0;
 
-  (state.gondolaPared?.lines || []).forEach((l) => {
-    gondolaParedColumnas += l.modules.length + 1;
-    l.modules.forEach((m) => {
-      const sc = m.sc || state.gondolaPared.shelfCount || 5;
-      gondolaParedBandejas += sc;
-      gondolaParedMensulas += Math.max(0, sc - 1) * 2;
-      gondolaParedCargaKg += sc * 80; // 80 kg per shelf
+  if (isSalon) {
+    (state.gondolaPared?.lines || []).forEach((l) => {
+      gondolaParedColumnas += l.modules.length + 1;
+      l.modules.forEach((m) => {
+        const sc = m.sc || state.gondolaPared.shelfCount || 5;
+        gondolaParedBandejas += sc;
+        gondolaParedMensulas += Math.max(0, sc - 1) * 2;
+        gondolaParedCargaKg += sc * 80; // 80 kg per shelf
+      });
     });
-  });
+  }
 
-  // 4. Góndolas Centrales
+  // 4. Góndolas Centrales - Only in Salón
   let gondolaCentralColumnas = 0;
   let gondolaCentralBandejas = 0;
   let gondolaCentralMensulas = 0;
   let gondolaCentralCargaKg = 0;
 
-  (state.gondolaCentral?.lines || []).forEach((l) => {
-    gondolaCentralColumnas += l.modules.length + 1;
-    l.modules.forEach((m) => {
-      const scA = m.scA || state.gondolaCentral.shelfCount || 3;
-      const scB = m.scB || state.gondolaCentral.shelfCount || 3;
-      const totalShelves = scA + scB;
-      gondolaCentralBandejas += totalShelves;
-      gondolaCentralMensulas += (Math.max(0, scA - 1) + Math.max(0, scB - 1)) * 2;
-      gondolaCentralCargaKg += totalShelves * 80;
+  if (isSalon) {
+    (state.gondolaCentral?.lines || []).forEach((l) => {
+      gondolaCentralColumnas += l.modules.length + 1;
+      l.modules.forEach((m) => {
+        const scA = m.scA || state.gondolaCentral.shelfCount || 3;
+        const scB = m.scB || state.gondolaCentral.shelfCount || 3;
+        const totalShelves = scA + scB;
+        gondolaCentralBandejas += totalShelves;
+        gondolaCentralMensulas += (Math.max(0, scA - 1) + Math.max(0, scB - 1)) * 2;
+        gondolaCentralCargaKg += totalShelves * 80;
+      });
     });
-  });
+  }
 
-  // 5. Salón Products
-  let punterasCount = state.punteras?.length || 0;
+  // 5. Salón Specific Products (Punteras, Heladeras, Check Outs)
+  let punterasCount = 0;
   let punterasBandejas = 0;
-  (state.punteras || []).forEach((p) => {
-    punterasBandejas += p.shelfCount || 4;
-  });
+  let heladerasCount = 0;
+  let checkoutsCount = 0;
 
-  let heladerasCount = state.heladeras?.length || 0;
-  let checkoutsCount = state.checkouts?.length || 0;
-  let puertasCount = state.doors?.length || 0;
+  if (isSalon) {
+    punterasCount = state.punteras?.length || 0;
+    (state.punteras || []).forEach((p) => {
+      punterasBandejas += p.shelfCount || 4;
+    });
+    heladerasCount = state.heladeras?.length || 0;
+    checkoutsCount = state.checkouts?.length || 0;
+  }
 
-  // Enclosing footprint
+  // Puertas según sección
+  const relevantDoors = (state.doors || []).filter((d) =>
+    isSalon ? d.section === 'salon' || !d.section : d.section === 'deposito'
+  );
+  const puertasCount = relevantDoors.length;
+
+  // Enclosing footprint strictly for active workspace elements
   let maxX = 0;
   let maxZ = 0;
 
-  (state.lines || []).forEach((l) => {
-    const b = getMinirackLineBounds(l, state.depth);
-    maxX = Math.max(maxX, b.x1);
-    maxZ = Math.max(maxZ, b.z1);
-  });
-  (state.heavyRacks?.lines || []).forEach((hrl) => {
-    const b = getHeavyRackLineBounds(hrl, state.heavyRacks.depth);
-    maxX = Math.max(maxX, b.x1);
-    maxZ = Math.max(maxZ, b.z1);
-  });
-  (state.shelfLines || []).forEach((sl) => {
-    const b = getShelfLineBounds(sl, state.shelfDepth);
-    maxX = Math.max(maxX, b.x1);
-    maxZ = Math.max(maxZ, b.z1);
-  });
-  (state.gondolaPared?.lines || []).forEach((gpl) => {
-    const b = getGondolaParedLineBounds(gpl, state.gondolaPared.depth);
-    maxX = Math.max(maxX, b.x1);
-    maxZ = Math.max(maxZ, b.z1);
-  });
-  (state.gondolaCentral?.lines || []).forEach((gcl) => {
-    const b = getGondolaCentralLineBounds(gcl, state.gondolaCentral.depth);
-    maxX = Math.max(maxX, b.x1);
-    maxZ = Math.max(maxZ, b.z1);
-  });
-  (state.punteras || []).forEach((p) => {
-    const b = getPunteraBounds(p);
-    maxX = Math.max(maxX, b.x1);
-    maxZ = Math.max(maxZ, b.z1);
-  });
-  (state.heladeras || []).forEach((h) => {
-    const b = getHeladeraBounds(h);
-    maxX = Math.max(maxX, b.x1);
-    maxZ = Math.max(maxZ, b.z1);
-  });
-  (state.checkouts || []).forEach((c) => {
-    const b = getCheckoutBounds(c);
-    maxX = Math.max(maxX, b.x1);
-    maxZ = Math.max(maxZ, b.z1);
-  });
-  (state.doors || []).forEach((d) => {
+  if (!isSalon) {
+    (state.lines || []).forEach((l) => {
+      const b = getMinirackLineBounds(l, state.depth);
+      maxX = Math.max(maxX, b.x1);
+      maxZ = Math.max(maxZ, b.z1);
+    });
+    (state.heavyRacks?.lines || []).forEach((hrl) => {
+      const b = getHeavyRackLineBounds(hrl, state.heavyRacks.depth);
+      maxX = Math.max(maxX, b.x1);
+      maxZ = Math.max(maxZ, b.z1);
+    });
+    (state.shelfLines || []).forEach((sl) => {
+      const b = getShelfLineBounds(sl, state.shelfDepth);
+      maxX = Math.max(maxX, b.x1);
+      maxZ = Math.max(maxZ, b.z1);
+    });
+  } else {
+    (state.gondolaPared?.lines || []).forEach((gpl) => {
+      const b = getGondolaParedLineBounds(gpl, state.gondolaPared.depth);
+      maxX = Math.max(maxX, b.x1);
+      maxZ = Math.max(maxZ, b.z1);
+    });
+    (state.gondolaCentral?.lines || []).forEach((gcl) => {
+      const b = getGondolaCentralLineBounds(gcl, state.gondolaCentral.depth);
+      maxX = Math.max(maxX, b.x1);
+      maxZ = Math.max(maxZ, b.z1);
+    });
+    (state.punteras || []).forEach((p) => {
+      const b = getPunteraBounds(p);
+      maxX = Math.max(maxX, b.x1);
+      maxZ = Math.max(maxZ, b.z1);
+    });
+    (state.heladeras || []).forEach((h) => {
+      const b = getHeladeraBounds(h);
+      maxX = Math.max(maxX, b.x1);
+      maxZ = Math.max(maxZ, b.z1);
+    });
+    (state.checkouts || []).forEach((c) => {
+      const b = getCheckoutBounds(c);
+      maxX = Math.max(maxX, b.x1);
+      maxZ = Math.max(maxZ, b.z1);
+    });
+  }
+
+  relevantDoors.forEach((d) => {
     const b = getDoorBounds(d);
     maxX = Math.max(maxX, b.x1);
     maxZ = Math.max(maxZ, b.z1);
@@ -673,7 +699,10 @@ export function calculateSummary(state: AppState): MaterialsSummary {
     maxZ = Math.max(maxZ, b.z1);
   });
 
-  const cargaTotalKg = minirackCargaKg + heavyRackCargaKg + estanteriaCargaKg + gondolaParedCargaKg + gondolaCentralCargaKg + (punterasBandejas * 60);
+  const cargaTotalKg = isSalon
+    ? gondolaParedCargaKg + gondolaCentralCargaKg + (punterasBandejas * 60)
+    : minirackCargaKg + heavyRackCargaKg + estanteriaCargaKg;
+
   const areaOcupadaM2 = maxX * maxZ;
 
   return {

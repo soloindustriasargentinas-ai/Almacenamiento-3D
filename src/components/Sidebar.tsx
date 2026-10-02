@@ -63,6 +63,7 @@ interface SidebarProps {
   onOpenSaveDialog: (action: 'save' | 'designer' | 'share') => void;
   onPrintPDF: () => void;
   onSetGondolaCentralModuleHeight?: (lineIdx: number, modIdx: number, height: number) => void;
+  onSwitchSection?: (sec: 'salon' | 'deposito') => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -75,6 +76,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenSaveDialog,
   onPrintPDF,
   onSetGondolaCentralModuleHeight,
+  onSwitchSection,
 }) => {
   const summary = calculateSummary(state);
   const isSalon = state.activeSection === 'salon';
@@ -1090,32 +1092,40 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-900 rounded-xl border border-slate-800">
           <button
             onClick={() => {
-              onUpdateState((prev) => ({ ...prev, activeSection: 'salon' }));
-              onTabChange('gondola-pared');
+              if (onSwitchSection) {
+                onSwitchSection('salon');
+              } else {
+                onUpdateState((prev) => ({ ...prev, activeSection: 'salon' }));
+                onTabChange('gondola-pared');
+              }
             }}
             className={`py-2 px-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
               isSalon
-                ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-md shadow-rose-900/40'
+                ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-md shadow-rose-900/40 ring-1 ring-rose-400/40'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
             }`}
           >
             <Store className="w-3.5 h-3.5 text-rose-200" />
-            <span>Salón</span>
+            <span>Salón Comercial</span>
           </button>
 
           <button
             onClick={() => {
-              onUpdateState((prev) => ({ ...prev, activeSection: 'deposito' }));
-              onTabChange('racks-livianos');
+              if (onSwitchSection) {
+                onSwitchSection('deposito');
+              } else {
+                onUpdateState((prev) => ({ ...prev, activeSection: 'deposito' }));
+                onTabChange('racks-livianos');
+              }
             }}
             className={`py-2 px-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
               !isSalon
-                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-900/40'
+                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-900/40 ring-1 ring-blue-400/40'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
             }`}
           >
             <Building2 className="w-3.5 h-3.5 text-blue-200" />
-            <span>Depósito</span>
+            <span>Depósito Industrial</span>
           </button>
         </div>
       </div>
