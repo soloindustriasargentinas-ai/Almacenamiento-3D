@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import {
   ActiveTab,
   AppState,
@@ -9,6 +9,7 @@ import {
   SelectionState,
   ShelfLine,
 } from '../types';
+import { extractStateFromBackupFile } from '../utils/backupService';
 import {
   calculateSummary,
   findOpenPlacementSpot,
@@ -41,13 +42,15 @@ import {
   Copy,
   Printer, 
   UserCheck, 
-  Wrench, 
   Share2,
   Snowflake,
   CreditCard,
   DoorOpen,
   DoorClosed,
   Package,
+  Archive,
+  Upload,
+  PanelLeftClose,
 } from 'lucide-react';
 import { PunterasTab } from './sidebar/PunterasTab';
 import { HeladerasTab } from './sidebar/HeladerasTab';
@@ -62,11 +65,13 @@ interface SidebarProps {
   onTabChange: (tab: ActiveTab) => void;
   onSelect: (sel: SelectionState) => void;
   onUpdateState: (updater: (prev: AppState) => AppState) => void;
-  onOpenSaveDialog: (action: 'save' | 'designer' | 'share') => void;
+  onOpenSaveDialog: (action: 'client' | 'backup' | 'share' | 'save' | 'designer') => void;
   onPrintPDF: () => void;
   onSetGondolaCentralModuleHeight?: (lineIdx: number, modIdx: number, height: number) => void;
   onSetGondolaCentralLineHeight?: (lineIdx: number, height: number) => void;
   onSwitchSection?: (sec: 'salon' | 'deposito') => void;
+  onImportBackup?: (backupState: AppState) => void;
+  onToggleCollapse?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -81,9 +86,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSetGondolaCentralModuleHeight,
   onSetGondolaCentralLineHeight,
   onSwitchSection,
+  onImportBackup,
+  onToggleCollapse,
 }) => {
   const summary = calculateSummary(state);
   const isSalon = state.activeSection === 'salon';
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleBackupFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      if (!text) return;
+      const extracted = extractStateFromBackupFile(text);
+      if (extracted) {
+        if (onImportBackup) {
+          onImportBackup(extracted);
+        } else {
+          onUpdateState(() => extracted);
+        }
+        alert(`✅ Backup de "${extracted.meta?.cliente || 'Proyecto'}" restaurado con éxito. ¡Listo para continuar editando!`);
+      } else {
+        alert('⚠️ No se pudo leer el archivo de backup. Asegúrate de seleccionar un archivo .html o .json generado por la aplicación.');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
 
   // Tabs configuration for Salón - Renglón 1: Entorno & Periféricos
   const salonTabsRow1 = [
@@ -1216,6 +1247,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </p>
             </div>
           </div>
+          {onToggleCollapse && (
+            <button
+              onClick={onToggleCollapse}
+              className="p-1.5 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/80 transition-all flex items-center gap-1.5 text-xs font-bold cursor-pointer shadow-sm hover:scale-105"
+              title="Ocultar panel lateral (Expandir pantalla 3D)"
+            >
+              <PanelLeftClose className="w-4 h-4 text-rose-400" />
+              <span>Ocultar</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -2641,36 +2682,55 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
+      {/* Quick Backup Upload */}
+      <div className="px-3 pt-2 pb-1 bg-slate-950/80 border-t border-slate-800/60 flex items-center justify-between">
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleBackupFileChange}
+          accept=".html,.json"
+          className="hidden"
+        />
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="w-full py-1.5 px-3 rounded-lg bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-slate-300 hover:text-white font-bold flex items-center justify-center gap-1.5 transition-all text-[11px] cursor-pointer"
+          title="Subir un archivo HTML o JSON de backup previamente descargado para restaurarlo y continuar editando"
+        >
+          <Upload className="w-3.5 h-3.5 text-emerald-400" />
+          <span>Subir / Importar Backup HTML</span>
+        </button>
+      </div>
+
       {/* ── BOTTOM ACTION BAR ── */}
       <div className="p-3 border-t border-slate-800 bg-slate-950/90 flex gap-2 flex-shrink-0">
         <button
           onClick={onPrintPDF}
-          className="flex-1 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white font-bold flex flex-col items-center gap-1 transition-all text-[11px]"
+          className="flex-1 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white font-bold flex flex-col items-center gap-1 transition-all text-[11px] cursor-pointer"
           title="Imprimir o guardar PDF"
         >
           <Printer className="w-4 h-4 text-amber-400" />
           <span>PDF</span>
         </button>
         <button
-          onClick={() => onOpenSaveDialog('save')}
-          className="flex-1 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white font-bold flex flex-col items-center gap-1 transition-all text-[11px]"
-          title="Guardar archivo para Cliente (solo lectura)"
+          onClick={() => onOpenSaveDialog('client')}
+          className="flex-1 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white font-bold flex flex-col items-center gap-1 transition-all text-[11px] cursor-pointer"
+          title="Entregar vista 3D interactiva para Cliente (HTML recorrible con cursor sin posibilidad de cambios)"
         >
           <UserCheck className="w-4 h-4 text-sky-400" />
           <span>Cliente</span>
         </button>
         <button
-          onClick={() => onOpenSaveDialog('designer')}
-          className="flex-1 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white font-bold flex flex-col items-center gap-1 transition-all text-[11px]"
-          title="Guardar archivo Maestro Diseñador"
+          onClick={() => onOpenSaveDialog('backup')}
+          className="flex-1 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white font-bold flex flex-col items-center gap-1 transition-all text-[11px] cursor-pointer"
+          title="Exportar copia de seguridad (Backup HTML con toda la info del proyecto que luego se puede subir nuevamente y ser editable)"
         >
-          <Wrench className="w-4 h-4 text-rose-400" />
-          <span>Diseñador</span>
+          <Archive className="w-4 h-4 text-emerald-400" />
+          <span>Exportar</span>
         </button>
         <button
           onClick={() => onOpenSaveDialog('share')}
-          className="flex-1 py-2 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-600/50 text-emerald-300 font-bold flex flex-col items-center gap-1 transition-all text-[11px]"
-          title="Compartir por WhatsApp"
+          className="flex-1 py-2 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-600/50 text-emerald-300 font-bold flex flex-col items-center gap-1 transition-all text-[11px] cursor-pointer"
+          title="Compartir vista 3D por WhatsApp"
         >
           <Share2 className="w-4 h-4 text-emerald-400" />
           <span>WhatsApp</span>

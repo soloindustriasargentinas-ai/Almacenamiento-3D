@@ -3,12 +3,13 @@ import { ActiveTab, AppState, SelectionState, ViewMode, MetaConfig, Bounds3D, Wo
 import { Sidebar } from './components/Sidebar';
 import { Viewport3D } from './components/Viewport3D';
 import { FloatingInfo } from './components/FloatingInfo';
-import { SaveModal } from './components/SaveModal';
+import { SaveModal, SaveModalAction } from './components/SaveModal';
 import { LandingPage } from './components/LandingPage';
 import { AdminDashboard } from './components/AdminDashboard';
 import { useAuth } from './context/AuthContext';
 import { DbProject, saveProject, calculateProjectStats } from './services/dbService';
 import { createDefaultSalonState, createDefaultDepositoState } from './utils/templates';
+import { extractStateFromBackupFile } from './utils/backupService';
 import {
   clampObstacleToWarehouse,
   getDoorBounds,
@@ -54,6 +55,8 @@ import {
   Ruler,
   Undo2,
   Copy,
+  Gamepad2,
+  Upload,
 } from 'lucide-react';
 
 export default function App() {
@@ -77,7 +80,8 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('gondola-pared');
   const [selection, setSelection] = useState<SelectionState>({ type: null, idx: null });
-  const [saveDialogAction, setSaveDialogAction] = useState<'save' | 'designer' | 'share' | null>(null);
+  const [saveDialogAction, setSaveDialogAction] = useState<SaveModalAction | null>(null);
+  const headerBackupInputRef = useRef<HTMLInputElement>(null);
   const [notification, setNotification] = useState<string | null>(null);
   const notifTimeoutRef = useRef<number | null>(null);
 
@@ -107,6 +111,29 @@ export default function App() {
       return next;
     });
   }, []);
+
+  const handleImportBackup = useCallback((importedState: AppState) => {
+    updateStateWithHistory(() => importedState);
+    showNotification(`✅ Backup de "${importedState.meta?.cliente || 'Proyecto'}" cargado con éxito. ¡Listo para editar!`);
+  }, [updateStateWithHistory, showNotification]);
+
+  const handleHeaderBackupFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      if (!text) return;
+      const extracted = extractStateFromBackupFile(text);
+      if (extracted) {
+        handleImportBackup(extracted);
+      } else {
+        showNotification('⚠️ No se pudo leer el archivo de backup. Selecciona un archivo .html o .json generado por la app.');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
 
   const handleUndo = useCallback(() => {
     setUndoStack((stack) => {
@@ -143,6 +170,19 @@ export default function App() {
     setSelection({ type: null, idx: null });
     showNotification(newSection === 'salon' ? 'Espacio Comercial: Salón Activo' : 'Espacio Industrial: Depósito Activo');
   }, [showNotification]);
+
+  // Walkthrough Gaming Mode State (Recorrido con Carrito de 47 cm)
+  const [walkthroughActive, setWalkthroughActive] = useState(false);
+
+  const handleToggleWalkthroughMode = useCallback(() => {
+    setWalkthroughActive((prev) => {
+      const next = !prev;
+      if (next && state.activeSection !== 'salon') {
+        handleSwitchSection('salon');
+      }
+      return next;
+    });
+  }, [state.activeSection, handleSwitchSection]);
 
   // Strict Movement Handlers: No product leaves the warehouse, no product overlaps another
   const handleMoveMinirack = useCallback((idx: number, x: number, z: number) => {
@@ -454,7 +494,8 @@ export default function App() {
   // Keyboard Navigation (Arrow Keys, Delete & Undo)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (screen !== 'visualizer') return;
+      // During walkthrough gaming mode, disable all fixture modifications/nudging/shortcuts
+      if (screen !== 'visualizer' || walkthroughActive) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
       // Undo shortcut (Ctrl + Z / Cmd + Z)
@@ -494,7 +535,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selection, state, screen]);
+  }, [selection, state, screen, walkthroughActive]);
 
   const handleNudgeSelected = (dx: number, dz: number) => {
     if (!selection.type || selection.idx === null) return;
@@ -1316,14 +1357,47 @@ export default function App() {
             </span>
           </button>
 
+          {/* Hidden Header Backup File Input */}
+          <input
+            type="file"
+            ref={headerBackupInputRef}
+            onChange={handleHeaderBackupFileChange}
+            accept=".html,.json"
+            className="hidden"
+          />
+
+          {/* Import Backup Button */}
+          <button
+            onClick={() => headerBackupInputRef.current?.click()}
+            className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition-colors cursor-pointer"
+            title="Subir un archivo HTML o JSON de backup previamente descargado para restaurarlo y continuar editando"
+          >
+            <Upload className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden lg:inline">Importar Backup</span>
+          </button>
+
           {/* Export / Share Modal Button */}
           <button
-            onClick={() => setSaveDialogAction('save')}
-            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition-colors cursor-pointer"
-            title="Exportar archivo HTML interactivo o Ficha"
+            onClick={() => setSaveDialogAction('client')}
+            className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition-colors cursor-pointer"
+            title="Exportar archivo HTML interactivo 3D para Cliente o Backup"
           >
             <FileText className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden md:inline">Exportar</span>
+            <span className="hidden md:inline">Exportar 3D / Backup</span>
+          </button>
+
+          {/* Botón Videojuego Vista Pasillo Game */}
+          <button
+            onClick={handleToggleWalkthroughMode}
+            className={`px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 transition-all shadow-md cursor-pointer ${
+              walkthroughActive
+                ? 'bg-gradient-to-r from-pink-600 to-rose-600 text-white ring-2 ring-pink-400'
+                : 'bg-gradient-to-r from-pink-700/80 to-rose-700/80 hover:from-pink-600 hover:to-rose-600 text-pink-100 hover:text-white border border-pink-500/50'
+            }`}
+            title="Vista Pasillo Game: Recorrer el salón en primera persona/3D, comprobar cruce de 2 personas y auditar pasillos"
+          >
+            <Gamepad2 className="w-3.5 h-3.5 text-pink-200" />
+            <span className="font-extrabold">🎮 Vista Pasillo Game</span>
           </button>
 
           {/* Sombras & Cotas Quick Toggles */}
@@ -1408,8 +1482,8 @@ export default function App() {
 
       {/* Main 3D Screen Workspace */}
       <div className="relative flex-1 flex overflow-hidden">
-        {/* Collapsible Sidebar Controls */}
-        {sidebarOpen && (
+        {/* Collapsible Sidebar Controls - Hidden during walkthroughActive */}
+        {sidebarOpen && !walkthroughActive && (
           <div className="shrink-0 h-full border-r border-slate-800/80 transition-all duration-300 z-20">
             <Sidebar
               state={state}
@@ -1423,6 +1497,7 @@ export default function App() {
               onSetGondolaCentralModuleHeight={handleSetGondolaCentralModuleHeight}
               onSetGondolaCentralLineHeight={handleSetGondolaCentralLineHeight}
               onSwitchSection={handleSwitchSection}
+              onImportBackup={handleImportBackup}
             />
           </div>
         )}
@@ -1446,10 +1521,12 @@ export default function App() {
             onSetViewMode={(mode) => setState((prev) => ({ ...prev, viewMode: mode }))}
             onToggleShadows={() => setState((prev) => ({ ...prev, showShadows: !prev.showShadows }))}
             onToggleDims={() => setState((prev) => ({ ...prev, showDims: !prev.showDims }))}
+            walkthroughActive={walkthroughActive}
+            onToggleWalkthrough={setWalkthroughActive}
           />
 
           {/* If sidebar is collapsed, quick open button floating on top left of viewport */}
-          {!sidebarOpen && (
+          {!sidebarOpen && !walkthroughActive && (
             <button
               onClick={() => setSidebarOpen(true)}
               className="absolute top-4 left-4 z-30 px-3.5 py-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-slate-700 shadow-2xl backdrop-blur-md text-xs font-bold flex items-center gap-2 cursor-pointer transition-all hover:scale-105"
@@ -1459,19 +1536,21 @@ export default function App() {
             </button>
           )}
 
-          {/* Floating Inspector for Selected Item */}
-          <FloatingInfo
-            state={state}
-            selection={selection}
-            onClose={() => setSelection({ type: null, idx: null })}
-            onNudge={handleNudgeSelected}
-            onRotate={handleRotateSelected}
-            onDelete={handleDeleteSelected}
-            onDuplicate={handleDuplicateSelected}
-            onSetGondolaCentralModuleHeight={handleSetGondolaCentralModuleHeight}
-            onSetGondolaCentralLineHeight={handleSetGondolaCentralLineHeight}
-            onUpdateCheckout={handleUpdateCheckout}
-          />
+          {/* Floating Inspector for Selected Item (Hidden during Walkthrough Game) */}
+          {!walkthroughActive && selection.type && (
+            <FloatingInfo
+              state={state}
+              selection={selection}
+              onClose={() => setSelection({ type: null, idx: null })}
+              onNudge={handleNudgeSelected}
+              onRotate={handleRotateSelected}
+              onDelete={handleDeleteSelected}
+              onDuplicate={handleDuplicateSelected}
+              onSetGondolaCentralModuleHeight={handleSetGondolaCentralModuleHeight}
+              onSetGondolaCentralLineHeight={handleSetGondolaCentralLineHeight}
+              onUpdateCheckout={handleUpdateCheckout}
+            />
+          )}
 
           {/* Collision / Limit Notification Toast */}
           {notification && (

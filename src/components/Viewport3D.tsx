@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import {
@@ -36,6 +36,22 @@ import {
   getDefaultCentralGondolaShelves,
 } from '../utils/calculations';
 import { AppMaterials, initMaterials } from '../utils/materials';
+import {
+  createCartAndAvatarMesh,
+  checkCartCollision,
+  measureAisleClearance,
+  initializeNpcCrossingTest,
+  updateNpcCrossingStep,
+  scanAllSalonBottlenecks,
+  findSafeWalkthroughSpawnPoint,
+  walkthroughAudio,
+  AisleMeasurement,
+  NpcSimulationState,
+  BottleneckPoint,
+  CartPhysicsState,
+} from '../utils/cartWalkthrough';
+import { CartWalkthroughOverlay, CameraWalkthroughMode } from './CartWalkthroughOverlay';
+import { Gamepad2 } from 'lucide-react';
 
 interface Viewport3DProps {
   state: AppState;
@@ -54,6 +70,8 @@ interface Viewport3DProps {
   onSetViewMode: (mode: ViewMode) => void;
   onToggleShadows?: () => void;
   onToggleDims?: () => void;
+  walkthroughActive?: boolean;
+  onToggleWalkthrough?: (active: boolean) => void;
 }
 
 export const Viewport3D: React.FC<Viewport3DProps> = ({
@@ -73,6 +91,8 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
   onSetViewMode,
   onToggleShadows,
   onToggleDims,
+  walkthroughActive,
+  onToggleWalkthrough,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -103,6 +123,204 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
   const heavyRackGroupRef = useRef<THREE.Group>(new THREE.Group());
   const selBoxHelperRef = useRef<THREE.Box3Helper | null>(null);
   const gridHelperRef = useRef<THREE.GridHelper | null>(null);
+
+  // Walkthrough Game Mode Groups & Animation Helpers
+  const playerGroupRef = useRef<THREE.Group>(new THREE.Group());
+  const npcGroupRef = useRef<THREE.Group>(new THREE.Group());
+  const laserGuideGroupRef = useRef<THREE.Group>(new THREE.Group());
+  const bottleneckMarkersGroupRef = useRef<THREE.Group>(new THREE.Group());
+
+  const playerMeshHelperRef = useRef<{
+    updateAnimation: (deltaDist: number, isMoving: boolean) => void;
+    setWarningColor: (warn: boolean) => void;
+  } | null>(null);
+
+  const npcMeshHelperRef = useRef<{
+    updateAnimation: (deltaDist: number, isMoving: boolean) => void;
+    setWarningColor: (warn: boolean) => void;
+  } | null>(null);
+
+  // Walkthrough Game Mode States
+  const [internalWalkthrough, setInternalWalkthrough] = useState(false);
+  const isWalkthroughActive = walkthroughActive !== undefined ? walkthroughActive : internalWalkthrough;
+  const isWalkthroughActiveRef = useRef(isWalkthroughActive);
+  isWalkthroughActiveRef.current = isWalkthroughActive;
+
+  const [cameraWalkthroughMode, setCameraWalkthroughMode] = useState<CameraWalkthroughMode>('third_person');
+  const cameraWalkthroughModeRef = useRef(cameraWalkthroughMode);
+  cameraWalkthroughModeRef.current = cameraWalkthroughMode;
+
+  const [blockedWarning, setBlockedWarning] = useState<string | null>(null);
+  const [showBottlenecks, setShowBottlenecks] = useState(false);
+  const [bottlenecks, setBottlenecks] = useState<BottleneckPoint[]>([]);
+
+  const [aisleMeasurement, setAisleMeasurement] = useState<AisleMeasurement>({
+    freeWidth: 1.6,
+    leftDist: 0.55,
+    rightDist: 0.58,
+    status: 'optimal',
+    recommendedWidth: 1.4,
+    canTwoCartsPass: true,
+  });
+
+  const [npcState, setNpcState] = useState<NpcSimulationState>({
+    active: false,
+    x: 0,
+    z: 0,
+    heading: 0,
+    speed: 1.1,
+    startX: 0,
+    startZ: 0,
+    targetX: 0,
+    targetZ: 0,
+    passedPlayer: false,
+    collidedWithPlayer: false,
+    result: null,
+    message: null,
+    distanceTraveled: 0,
+  });
+  const npcStateRef = useRef(npcState);
+  npcStateRef.current = npcState;
+
+  const lastBlockedTimeRef = useRef(0);
+
+  const playerPhysicsRef = useRef<CartPhysicsState>({
+    x: 2.2,
+    z: 2.0,
+    heading: 0,
+    speed: 0,
+    turnSpeed: 0,
+    isMoving: false,
+  });
+
+  const keysDownRef = useRef<{ [key: string]: boolean }>({});
+  const walkthroughCmdRef = useRef<'forward' | 'backward' | 'left' | 'right' | 'stop'>('stop');
+
+  // Walkthrough Speed Setting: normal (1.8 m/s) vs turbo (3.0 m/s)
+  const [walkthroughSpeed, setWalkthroughSpeed] = useState<'normal' | 'turbo'>('normal');
+  const walkthroughSpeedRef = useRef(walkthroughSpeed);
+  walkthroughSpeedRef.current = walkthroughSpeed;
+
+  // Mouse cursor steering & navigation in walkthrough
+  const mouseNavTargetRef = useRef<{ x: number; z: number } | null>(null);
+  const isMouseDownNavRef = useRef(false);
+  const mouseNavMarkerGroupRef = useRef<THREE.Group>(new THREE.Group());
+
+  const npcResultTimerRef = useRef<number | null>(null);
+  const blockedTimerRef = useRef<number | null>(null);
+
+  // Automatically spawn in open walkway when entering walkthrough mode and clear fixture selection
+  useEffect(() => {
+    if (isWalkthroughActive) {
+      onSelect({ type: null, idx: null }); // Deselect and lock fixture editing during game mode
+      const spawn = findSafeWalkthroughSpawnPoint(stateRef.current);
+      playerPhysicsRef.current.x = spawn.x;
+      playerPhysicsRef.current.z = spawn.z;
+      playerPhysicsRef.current.heading = spawn.heading;
+      playerPhysicsRef.current.speed = 0;
+      playerPhysicsRef.current.isMoving = false;
+      setBlockedWarning(null);
+      setNpcState((prev) => ({ ...prev, active: false, result: null }));
+    }
+  }, [isWalkthroughActive, onSelect]);
+
+  const handleStartNpcTest = useCallback(() => {
+    if (npcResultTimerRef.current) clearTimeout(npcResultTimerRef.current);
+    const nextNpc = initializeNpcCrossingTest(stateRef.current, playerPhysicsRef.current);
+    npcStateRef.current = nextNpc;
+    setNpcState(nextNpc);
+  }, []);
+
+  const handleResetPosition = useCallback(() => {
+    if (npcResultTimerRef.current) clearTimeout(npcResultTimerRef.current);
+    if (blockedTimerRef.current) clearTimeout(blockedTimerRef.current);
+    mouseNavTargetRef.current = null;
+    mouseNavMarkerGroupRef.current.visible = false;
+    const spawn = findSafeWalkthroughSpawnPoint(stateRef.current);
+    playerPhysicsRef.current = {
+      x: spawn.x,
+      z: spawn.z,
+      heading: spawn.heading,
+      speed: 0,
+      turnSpeed: 0,
+      isMoving: false,
+    };
+    setBlockedWarning(null);
+    setNpcState((prev) => ({ ...prev, active: false, result: null }));
+  }, []);
+
+  const handleTeleport = useCallback((tx: number, tz: number, theading = 0) => {
+    mouseNavTargetRef.current = null;
+    mouseNavMarkerGroupRef.current.visible = false;
+    playerPhysicsRef.current.x = tx;
+    playerPhysicsRef.current.z = tz;
+    playerPhysicsRef.current.heading = theading;
+    playerPhysicsRef.current.speed = 0;
+    playerPhysicsRef.current.isMoving = false;
+    setBlockedWarning(null);
+    setNpcState((prev) => ({ ...prev, active: false, result: null }));
+  }, []);
+
+  const handleQuickTeleport = useCallback((preset: 'central1' | 'central2' | 'pared' | 'cajas' | 'entrada') => {
+    const W = stateRef.current.warehouse.width;
+    const D = stateRef.current.warehouse.depth;
+    if (preset === 'central1') {
+      handleTeleport(Math.min(W - 2, 4.0), Math.min(D - 2, 3.5), 0);
+    } else if (preset === 'central2') {
+      handleTeleport(Math.min(W - 2, 6.5), Math.min(D - 2, 3.5), 0);
+    } else if (preset === 'pared') {
+      handleTeleport(1.6, Math.min(D - 2, 4.0), 0);
+    } else if (preset === 'cajas') {
+      handleTeleport(Math.min(W - 2, 3.0), 1.8, Math.PI / 2);
+    } else if (preset === 'entrada') {
+      const spawn = findSafeWalkthroughSpawnPoint(stateRef.current);
+      handleTeleport(spawn.x, spawn.z, spawn.heading);
+    }
+  }, [handleTeleport]);
+
+  const handleClearBlockedWarning = useCallback(() => {
+    if (blockedTimerRef.current) clearTimeout(blockedTimerRef.current);
+    setBlockedWarning(null);
+    playerMeshHelperRef.current?.setWarningColor(false);
+  }, []);
+
+  const handleCloseWalkthrough = useCallback(() => {
+    mouseNavTargetRef.current = null;
+    mouseNavMarkerGroupRef.current.visible = false;
+    if (onToggleWalkthrough) onToggleWalkthrough(false);
+    else setInternalWalkthrough(false);
+  }, [onToggleWalkthrough]);
+
+  const handleToggleBottlenecks = useCallback(() => {
+    setShowBottlenecks((prev) => {
+      const next = !prev;
+      if (next) {
+        const found = scanAllSalonBottlenecks(stateRef.current);
+        setBottlenecks(found);
+        bottleneckMarkersGroupRef.current.clear();
+        found.forEach((b) => {
+          const ringGeom = new THREE.RingGeometry(0.35, 0.45, 16);
+          ringGeom.rotateX(-Math.PI / 2);
+          const ringMat = new THREE.MeshBasicMaterial({
+            color: b.severity === 'critical' ? 0xef4444 : 0xf59e0b,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.8,
+          });
+          const marker = new THREE.Mesh(ringGeom, ringMat);
+          marker.position.set(b.x, 0.02, b.z);
+          bottleneckMarkersGroupRef.current.add(marker);
+        });
+      } else {
+        bottleneckMarkersGroupRef.current.clear();
+      }
+      return next;
+    });
+  }, []);
+
+  const handleMoveCommand = useCallback((cmd: 'forward' | 'backward' | 'left' | 'right' | 'stop') => {
+    walkthroughCmdRef.current = cmd;
+  }, []);
 
   // Lights
   const ambLightRef = useRef<THREE.AmbientLight | null>(null);
@@ -254,36 +472,344 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     scene.add(checkoutGroupRef.current);
     scene.add(doorGroupRef.current);
     scene.add(heavyRackGroupRef.current);
+    scene.add(playerGroupRef.current);
+    scene.add(npcGroupRef.current);
+    scene.add(laserGuideGroupRef.current);
+    scene.add(bottleneckMarkersGroupRef.current);
+    scene.add(mouseNavMarkerGroupRef.current);
+
+    // Build Cart & Avatar 3D meshes (47 cm cart width)
+    const pMesh = createCartAndAvatarMesh(false);
+    playerMeshHelperRef.current = pMesh;
+    playerGroupRef.current.clear();
+    playerGroupRef.current.add(pMesh.group);
+    playerGroupRef.current.visible = false;
+
+    const nMesh = createCartAndAvatarMesh(true);
+    npcMeshHelperRef.current = nMesh;
+    npcGroupRef.current.clear();
+    npcGroupRef.current.add(nMesh.group);
+    npcGroupRef.current.visible = false;
+
+    // Build Mouse Navigation Target Floor Ring
+    const mouseRingGeo = new THREE.RingGeometry(0.18, 0.28, 32);
+    mouseRingGeo.rotateX(-Math.PI / 2);
+    const mouseRingMat = new THREE.MeshBasicMaterial({
+      color: 0xec4899,
+      transparent: true,
+      opacity: 0.85,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const mouseRingMesh = new THREE.Mesh(mouseRingGeo, mouseRingMat);
+    mouseRingMesh.position.y = 0.02;
+    mouseNavMarkerGroupRef.current.clear();
+    mouseNavMarkerGroupRef.current.add(mouseRingMesh);
+    mouseNavMarkerGroupRef.current.visible = false;
 
     // Dimension canvas setup
     dimCanvasRef.current.width = width;
     dimCanvasRef.current.height = height;
 
-    // Animation Loop with smooth camera interpolation
+    // Animation Loop with smooth camera interpolation and walkthrough physics
     let running = true;
+    let lastTime = performance.now();
+    let lastMeasTime = 0;
+
     const animate = () => {
       if (!running) return;
       animFrameRef.current = requestAnimationFrame(animate);
 
-      // Smooth camera interpolation
-      if (cameraTargetPos.current && controlsTargetPos.current) {
-        camera.position.lerp(cameraTargetPos.current, 0.08);
-        controls.target.lerp(controlsTargetPos.current, 0.08);
+      const now = performance.now();
+      const dt = Math.min(0.08, (now - lastTime) / 1000);
+      lastTime = now;
 
-        if (
-          camera.position.distanceTo(cameraTargetPos.current) < 0.05 &&
-          controls.target.distanceTo(controlsTargetPos.current) < 0.05
-        ) {
-          cameraTargetPos.current = null;
-          controlsTargetPos.current = null;
+      const isWalk = isWalkthroughActiveRef.current;
+
+      if (isWalk) {
+        controls.enabled = false;
+        playerGroupRef.current.visible = true;
+
+        // Player physics update
+        const keys = keysDownRef.current;
+        const cmd = walkthroughCmdRef.current;
+        const phys = playerPhysicsRef.current;
+
+        const forward = keys['w'] || keys['W'] || keys['ArrowUp'] || cmd === 'forward';
+        const backward = keys['s'] || keys['S'] || keys['ArrowDown'] || cmd === 'backward';
+        const left = keys['a'] || keys['A'] || keys['ArrowLeft'] || cmd === 'left';
+        const right = keys['d'] || keys['D'] || keys['ArrowRight'] || cmd === 'right';
+
+        if (forward || backward || left || right) {
+          // Keyboard/D-pad overrides mouse cursor navigation
+          mouseNavTargetRef.current = null;
+          mouseNavMarkerGroupRef.current.visible = false;
         }
+
+        const moveSpeed = walkthroughSpeedRef.current === 'turbo' ? 3.0 : 1.8;
+        let traveled = 0;
+
+        if (forward || backward || left || right) {
+          const turnSpeed = 2.6;
+          if (left || right) {
+            const candHeading = phys.heading + (left ? turnSpeed : -turnSpeed) * dt;
+            const turnCol = checkCartCollision(stateRef.current, phys.x, phys.z, candHeading);
+            if (!turnCol.collided) {
+              phys.heading = candHeading;
+            } else {
+              setBlockedWarning(turnCol.reason || '⛔ Espacio que no puedo atravesar: Giro bloqueado');
+              lastBlockedTimeRef.current = now;
+              playerMeshHelperRef.current?.setWarningColor(true);
+              walkthroughAudio.playBlocked();
+              if (blockedTimerRef.current) clearTimeout(blockedTimerRef.current);
+              blockedTimerRef.current = window.setTimeout(() => {
+                setBlockedWarning(null);
+                playerMeshHelperRef.current?.setWarningColor(false);
+              }, 7000);
+            }
+          }
+
+          let moveDir = 0;
+          if (forward) moveDir += 1;
+          if (backward) moveDir -= 1;
+
+          const speed = moveDir !== 0 ? moveSpeed * moveDir : 0;
+          phys.isMoving = moveDir !== 0;
+
+          if (moveDir !== 0) {
+            const candX = phys.x + Math.sin(phys.heading) * speed * dt;
+            const candZ = phys.z + Math.cos(phys.heading) * speed * dt;
+
+            const col = checkCartCollision(stateRef.current, candX, candZ, phys.heading);
+            if (col.collided) {
+              setBlockedWarning(col.reason || '⛔ Espacio que no puedo atravesar: Bloqueo detectado');
+              lastBlockedTimeRef.current = now;
+              playerMeshHelperRef.current?.setWarningColor(true);
+              walkthroughAudio.playBlocked();
+              if (blockedTimerRef.current) clearTimeout(blockedTimerRef.current);
+              blockedTimerRef.current = window.setTimeout(() => {
+                setBlockedWarning(null);
+                playerMeshHelperRef.current?.setWarningColor(false);
+              }, 7000);
+            } else {
+              traveled = Math.abs(speed * dt);
+              phys.x = candX;
+              phys.z = candZ;
+            }
+          }
+        } else if (mouseNavTargetRef.current) {
+          // ── Mouse Cursor Steering & Navigation ──
+          const tx = mouseNavTargetRef.current.x;
+          const tz = mouseNavTargetRef.current.z;
+          const dx = tx - phys.x;
+          const dz = tz - phys.z;
+          const dist = Math.hypot(dx, dz);
+
+          if (dist > 0.20) {
+            // Pulse visual marker ring
+            const pulse = 1.0 + 0.15 * Math.sin(now * 0.008);
+            mouseNavMarkerGroupRef.current.scale.set(pulse, pulse, pulse);
+            mouseNavMarkerGroupRef.current.visible = true;
+
+            const targetHeading = Math.atan2(dx, dz);
+            let diff = targetHeading - phys.heading;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+
+            // Turn smoothly towards cursor point
+            const maxTurn = 6.2 * dt;
+            phys.heading += Math.sign(diff) * Math.min(Math.abs(diff), maxTurn);
+
+            // Move forward along heading towards cursor
+            if (Math.abs(diff) < 1.35) {
+              const stepDist = Math.min(dist, moveSpeed * dt);
+              const candX = phys.x + Math.sin(phys.heading) * stepDist;
+              const candZ = phys.z + Math.cos(phys.heading) * stepDist;
+
+              const col = checkCartCollision(stateRef.current, candX, candZ, phys.heading);
+              if (col.collided) {
+                setBlockedWarning(col.reason || '⛔ Espacio que no puedo atravesar: Bloqueo detectado');
+                lastBlockedTimeRef.current = now;
+                playerMeshHelperRef.current?.setWarningColor(true);
+                walkthroughAudio.playBlocked();
+                mouseNavTargetRef.current = null;
+                mouseNavMarkerGroupRef.current.visible = false;
+                phys.isMoving = false;
+                if (blockedTimerRef.current) clearTimeout(blockedTimerRef.current);
+                blockedTimerRef.current = window.setTimeout(() => {
+                  setBlockedWarning(null);
+                  playerMeshHelperRef.current?.setWarningColor(false);
+                }, 7000);
+              } else {
+                traveled = stepDist;
+                phys.x = candX;
+                phys.z = candZ;
+                phys.isMoving = true;
+              }
+            } else {
+              phys.isMoving = false;
+            }
+          } else {
+            // Reached destination target
+            mouseNavTargetRef.current = null;
+            mouseNavMarkerGroupRef.current.visible = false;
+            phys.isMoving = false;
+          }
+        } else {
+          phys.isMoving = false;
+          mouseNavMarkerGroupRef.current.visible = false;
+        }
+
+        // Update player mesh position and walking animation
+        playerGroupRef.current.position.set(phys.x, 0, phys.z);
+        playerGroupRef.current.rotation.y = phys.heading;
+        playerMeshHelperRef.current?.updateAnimation(traveled, phys.isMoving);
+
+        // NPC Crossing simulation update
+        if (npcStateRef.current.active) {
+          npcGroupRef.current.visible = true;
+          const currentAisle = measureAisleClearance(stateRef.current, phys.x, phys.z, phys.heading);
+          const nextNpc = updateNpcCrossingStep(npcStateRef.current, phys, currentAisle, dt);
+          npcStateRef.current = nextNpc;
+          setNpcState(nextNpc);
+
+          npcGroupRef.current.position.set(nextNpc.x, 0, nextNpc.z);
+          npcGroupRef.current.rotation.y = nextNpc.heading;
+          npcMeshHelperRef.current?.updateAnimation(nextNpc.speed * dt, true);
+
+          if (!nextNpc.active) {
+            // Once checked (approved or failed), the second person disappears immediately!
+            npcGroupRef.current.visible = false;
+            // Legends must last 7 seconds and then disappear
+            if (npcResultTimerRef.current) clearTimeout(npcResultTimerRef.current);
+            npcResultTimerRef.current = window.setTimeout(() => {
+              setNpcState((prev) => ({ ...prev, result: null, message: null }));
+            }, 7000);
+          }
+
+          if (nextNpc.collidedWithPlayer) {
+            npcMeshHelperRef.current?.setWarningColor(true);
+          } else {
+            npcMeshHelperRef.current?.setWarningColor(false);
+          }
+        } else {
+          npcGroupRef.current.visible = false;
+        }
+
+        // Periodic Live Aisle Measurement update (every ~120ms)
+        if (now - lastMeasTime > 120) {
+          lastMeasTime = now;
+          const meas = measureAisleClearance(stateRef.current, phys.x, phys.z, phys.heading);
+          setAisleMeasurement(meas);
+
+          // Update 3D laser line indicator between the two shelving faces
+          laserGuideGroupRef.current.clear();
+          const laserMat = new THREE.LineBasicMaterial({
+            color: meas.freeWidth >= 1.30 ? 0x22c55e : meas.freeWidth >= 0.90 ? 0xf59e0b : 0xef4444,
+            linewidth: 3,
+          });
+          const points = [
+            new THREE.Vector3(phys.x - Math.cos(phys.heading) * meas.leftDist, 0.25, phys.z + Math.sin(phys.heading) * meas.leftDist),
+            new THREE.Vector3(phys.x + Math.cos(phys.heading) * meas.rightDist, 0.25, phys.z - Math.sin(phys.heading) * meas.rightDist),
+          ];
+          const laserGeom = new THREE.BufferGeometry().setFromPoints(points);
+          const laserLine = new THREE.Line(laserGeom, laserMat);
+          laserGuideGroupRef.current.add(laserLine);
+        }
+
+        // Camera Tracking
+        const camMode = cameraWalkthroughModeRef.current;
+        if (camMode === 'third_person') {
+          const camTargetX = phys.x - Math.sin(phys.heading) * 2.8;
+          const camTargetY = 2.1;
+          const camTargetZ = phys.z - Math.cos(phys.heading) * 2.8;
+          camera.position.lerp(new THREE.Vector3(camTargetX, camTargetY, camTargetZ), 0.14);
+
+          const lookTarget = new THREE.Vector3(
+            phys.x + Math.sin(phys.heading) * 1.5,
+            1.1,
+            phys.z + Math.cos(phys.heading) * 1.5
+          );
+          camera.lookAt(lookTarget);
+        } else if (camMode === 'top_down') {
+          camera.position.lerp(new THREE.Vector3(phys.x, 11.5, phys.z), 0.14);
+          camera.lookAt(phys.x, 0, phys.z);
+        } else if (camMode === 'first_person') {
+          const camTargetX = phys.x + Math.sin(phys.heading) * 0.18;
+          const camTargetY = 1.48;
+          const camTargetZ = phys.z + Math.cos(phys.heading) * 0.18;
+          camera.position.lerp(new THREE.Vector3(camTargetX, camTargetY, camTargetZ), 0.22);
+
+          const lookTarget = new THREE.Vector3(
+            phys.x + Math.sin(phys.heading) * 5.0,
+            1.35,
+            phys.z + Math.cos(phys.heading) * 5.0
+          );
+          camera.lookAt(lookTarget);
+        }
+      } else {
+        controls.enabled = true;
+        playerGroupRef.current.visible = false;
+        npcGroupRef.current.visible = false;
+        laserGuideGroupRef.current.clear();
+
+        // Smooth camera interpolation
+        if (cameraTargetPos.current && controlsTargetPos.current) {
+          camera.position.lerp(cameraTargetPos.current, 0.08);
+          controls.target.lerp(controlsTargetPos.current, 0.08);
+
+          if (
+            camera.position.distanceTo(cameraTargetPos.current) < 0.05 &&
+            controls.target.distanceTo(controlsTargetPos.current) < 0.05
+          ) {
+            cameraTargetPos.current = null;
+            controlsTargetPos.current = null;
+          }
+        }
+
+        controls.update();
       }
 
-      controls.update();
       renderer.render(scene, camera);
-      drawDimensions();
+      if (!isWalk) {
+        drawDimensions();
+      }
     };
     animate();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!isWalkthroughActiveRef.current) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      const k = e.key.toLowerCase();
+      if (k === 'w' || k === 's' || k === 'a' || k === 'd' || e.key.startsWith('Arrow')) {
+        keysDownRef.current[e.key] = true;
+        keysDownRef.current[k] = true;
+      }
+      if (e.key === ' ' || k === 'c') {
+        e.preventDefault();
+        handleStartNpcTest();
+      }
+      if (k === 'v') {
+        setCameraWalkthroughMode((prev) => (prev === 'third_person' ? 'top_down' : prev === 'top_down' ? 'first_person' : 'third_person'));
+      }
+      if (k === '1') setCameraWalkthroughMode('third_person');
+      if (k === '2') setCameraWalkthroughMode('top_down');
+      if (k === '3') setCameraWalkthroughMode('first_person');
+      if (k === 'r') handleResetPosition();
+      if (e.key === 'Escape') {
+        handleCloseWalkthrough();
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase();
+      delete keysDownRef.current[e.key];
+      delete keysDownRef.current[k];
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
 
     const handleResize = () => {
       if (!containerRef.current || !renderer || !camera || !dimCanvasRef.current) return;
@@ -314,6 +840,8 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       running = false;
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       window.removeEventListener('resize', handleResize);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
       canvas.removeEventListener('webglcontextlost', handleContextLost);
       canvas.removeEventListener('webglcontextrestored', handleContextRestored);
       renderer.dispose();
@@ -1399,6 +1927,27 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
 
   // ── Mouse Drag & Selection Handlers ──
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    // In Walkthrough Game mode, navigate and steer the person/cart using the mouse cursor!
+    if (isWalkthroughActive) {
+      if (e.button === 0 && canvasRef.current && cameraRef.current) {
+        const r = canvasRef.current.getBoundingClientRect();
+        mouseVec.current.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+        raycaster.current.setFromCamera(mouseVec.current, cameraRef.current);
+        const hitFloor = new THREE.Vector3();
+        if (raycaster.current.ray.intersectPlane(floorPlane.current, hitFloor)) {
+          const W = stateRef.current.warehouse.width;
+          const D = stateRef.current.warehouse.depth;
+          const targetX = Math.max(0.35, Math.min(W - 0.35, hitFloor.x));
+          const targetZ = Math.max(0.35, Math.min(D - 0.35, hitFloor.z));
+          mouseNavTargetRef.current = { x: targetX, z: targetZ };
+          isMouseDownNavRef.current = true;
+          mouseNavMarkerGroupRef.current.position.set(targetX, 0.02, targetZ);
+          mouseNavMarkerGroupRef.current.visible = true;
+        }
+      }
+      return;
+    }
+
     if (e.button !== 0 || !canvasRef.current || !cameraRef.current) return;
     const r = canvasRef.current.getBoundingClientRect();
     mouseVec.current.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
@@ -1549,6 +2098,26 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    // In Walkthrough Game mode, dragging cursor continuously steers towards cursor
+    if (isWalkthroughActive) {
+      if (isMouseDownNavRef.current && canvasRef.current && cameraRef.current) {
+        const r = canvasRef.current.getBoundingClientRect();
+        mouseVec.current.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+        raycaster.current.setFromCamera(mouseVec.current, cameraRef.current);
+        const hitFloor = new THREE.Vector3();
+        if (raycaster.current.ray.intersectPlane(floorPlane.current, hitFloor)) {
+          const W = stateRef.current.warehouse.width;
+          const D = stateRef.current.warehouse.depth;
+          const targetX = Math.max(0.35, Math.min(W - 0.35, hitFloor.x));
+          const targetZ = Math.max(0.35, Math.min(D - 0.35, hitFloor.z));
+          mouseNavTargetRef.current = { x: targetX, z: targetZ };
+          mouseNavMarkerGroupRef.current.position.set(targetX, 0.02, targetZ);
+          mouseNavMarkerGroupRef.current.visible = true;
+        }
+      }
+      return;
+    }
+
     if (!isDraggingRef.current || !canvasRef.current || !cameraRef.current || !dragSessionRef.current) return;
     const dist = Math.hypot(e.clientX - mouseDownPosRef.current.x, e.clientY - mouseDownPosRef.current.y);
     if (dist < 4) return;
@@ -1601,6 +2170,11 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
   };
 
   const handleMouseUp = () => {
+    if (isWalkthroughActive) {
+      isMouseDownNavRef.current = false;
+      return;
+    }
+
     if (isDraggingRef.current) {
       isDraggingRef.current = false;
       if (controlsRef.current) controlsRef.current.enabled = true;
@@ -1639,7 +2213,7 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     <div
       ref={containerRef}
       id="viewport-container"
-      className="relative flex-1 w-full h-full bg-slate-950 overflow-hidden cursor-default"
+      className={`relative flex-1 w-full h-full bg-slate-950 overflow-hidden ${isWalkthroughActive ? 'cursor-pointer' : 'cursor-default'}`}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
@@ -1676,11 +2250,19 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
             <span className="text-emerald-400">👁️</span> Frontal / Alzado
           </button>
           <button
-            onClick={handleWalkthroughView}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition-all font-medium text-left"
-            title="Paseo Peatonal Inmersivo"
+            onClick={() => {
+              if (onToggleWalkthrough) onToggleWalkthrough(!isWalkthroughActive);
+              else setInternalWalkthrough(!isWalkthroughActive);
+            }}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all font-semibold text-left cursor-pointer ${
+              isWalkthroughActive
+                ? 'bg-gradient-to-r from-pink-600 to-rose-600 text-white shadow-md shadow-pink-600/30 ring-1 ring-pink-400'
+                : 'text-pink-300 hover:text-white hover:bg-pink-950/60 border border-pink-500/30'
+            }`}
+            title="Vista Pasillo Game (Carro 47 cm): Recorrer el salón en videojuego 3D y comprobar cruce de pasillos"
           >
-            <span className="text-rose-400">🚶</span> Peatonal Pasillo
+            <Gamepad2 className="w-3.5 h-3.5 text-pink-400" />
+            <span>🎮 Pasillo Game (47cm)</span>
           </button>
 
           {selection.type && (
@@ -1751,10 +2333,33 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
         </div>
       </div>
 
-      {/* Bottom helper tip */}
-      <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-slate-900/85 backdrop-blur-md border border-slate-800 text-slate-400 text-xs px-4 py-1.5 rounded-full pointer-events-none shadow-lg whitespace-nowrap">
-        Clic para seleccionar · Flechas del teclado (Shift=0.05m) para mover · Arrastrar vacío para orbitar
-      </div>
+      {/* Bottom helper tip (hidden during game mode) */}
+      {!isWalkthroughActive && (
+        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-slate-900/85 backdrop-blur-md border border-slate-800 text-slate-400 text-xs px-4 py-1.5 rounded-full pointer-events-none shadow-lg whitespace-nowrap">
+          Clic para seleccionar · Flechas del teclado (Shift=0.05m) para mover · Arrastrar vacío para orbitar
+        </div>
+      )}
+
+      {/* Cart Walkthrough Gaming HUD Overlay */}
+      {isWalkthroughActive && (
+        <CartWalkthroughOverlay
+          active={isWalkthroughActive}
+          cameraMode={cameraWalkthroughMode}
+          onSetCameraMode={setCameraWalkthroughMode}
+          aisle={aisleMeasurement}
+          npcState={npcState}
+          onStartNpcTest={handleStartNpcTest}
+          onResetPosition={handleResetPosition}
+          onClose={handleCloseWalkthrough}
+          blockedWarning={blockedWarning}
+          onMoveCommand={handleMoveCommand}
+          bottlenecks={bottlenecks}
+          showBottlenecks={showBottlenecks}
+          onToggleBottlenecks={handleToggleBottlenecks}
+          isMoving={playerPhysicsRef.current.isMoving}
+          onTeleport={handleTeleport}
+        />
+      )}
     </div>
   );
 };

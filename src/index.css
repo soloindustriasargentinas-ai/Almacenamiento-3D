@@ -72,3 +72,12 @@
 .animate-fadeIn {
   animation: fadeIn 0.15s ease-out forwards;
 }
+
+@keyframes shrink {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}
