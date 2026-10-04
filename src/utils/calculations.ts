@@ -823,13 +823,21 @@ export function sanitizeGondolaDimensions(st: AppState): AppState {
 
   const updatedCentralLines = (st.gondolaCentral?.lines || []).map((l) => {
     let lineChanged = false;
+    const lineH = l.height || st.gondolaCentral?.height || 1.6;
     const newMods = (l.modules || []).map((m) => {
       let modBl = m.bl;
       if (Math.abs(modBl - 1.0) < 0.05) {
         modBl = 1.2;
         lineChanged = true;
       }
-      return { ...m, bl: modBl };
+      const modH = m.height || lineH;
+      const defShelves = getDefaultCentralGondolaShelves(modH);
+      const curScA = m.scA !== undefined && m.scA > 0 ? m.scA : defShelves;
+      const curScB = m.scB !== undefined && m.scB > 0 ? m.scB : defShelves;
+      if (curScA !== m.scA || curScB !== m.scB) {
+        lineChanged = true;
+      }
+      return { ...m, bl: modBl, height: modH, scA: curScA, scB: curScB };
     });
 
     if (lineChanged) {
@@ -861,5 +869,18 @@ export function sanitizeGondolaDimensions(st: AppState): AppState {
   }
 
   return st;
+}
+
+/**
+ * Regla estricta de estantes para Góndola Central:
+ * - 1.20m de altura: 3 estantes de ambos lados (scA: 3, scB: 3).
+ * - 1.60m o 1.75m de altura: 4 estantes de ambos lados (scA: 4, scB: 4).
+ * - 2.00m de altura: 5 estantes de ambos lados (scA: 5, scB: 5).
+ */
+export function getDefaultCentralGondolaShelves(height: number): number {
+  const h = Number(height) || 1.6;
+  if (h <= 1.35) return 3; // 1.20m -> 3 estantes
+  if (h <= 1.85) return 4; // 1.60m y 1.75m -> 4 estantes
+  return 5; // 2.00m -> 5 estantes
 }
 

@@ -1,7 +1,7 @@
 import React from 'react';
 import { AppState, HeavyRackLine, SelectionState } from '../../types';
 import { findOpenPlacementSpot, realHeavyRackLineWidth } from '../../utils/calculations';
-import { Layers, Plus, RotateCw, Trash2 } from 'lucide-react';
+import { Layers, Plus, RotateCw, Trash2, Copy } from 'lucide-react';
 
 interface HeavyRacksTabProps {
   state: AppState;
@@ -93,6 +93,31 @@ export const HeavyRacksTab: React.FC<HeavyRacksTabProps> = ({
     if (selection.type === 'heavyRack' && selection.idx === idx) {
       onSelect({ type: null, idx: null });
     }
+  };
+
+  const duplicateLine = (idx: number) => {
+    onUpdateState((prev) => {
+      const lines = prev.heavyRacks?.lines || [];
+      const orig = lines[idx];
+      if (!orig) return prev;
+      const w = realHeavyRackLineWidth(orig);
+      const d = prev.heavyRacks?.depth || 1.10;
+      const spot = findOpenPlacementSpot(prev, w, d);
+      const newLine: HeavyRackLine = {
+        ...orig,
+        xOff: spot.x,
+        zOff: spot.z,
+        modules: orig.modules.map((m) => ({ ...m })),
+      };
+      return {
+        ...prev,
+        heavyRacks: {
+          ...(prev.heavyRacks || { height: 4.5, depth: 1.1, defaultLevels: 3 }),
+          lines: [...lines, newLine],
+        },
+      };
+    });
+    onSelect({ type: 'heavyRack', idx: (state.heavyRacks?.lines?.length || 0) });
   };
 
   const rotateLine = (idx: number) => {
@@ -305,6 +330,16 @@ export const HeavyRacksTab: React.FC<HeavyRacksTabProps> = ({
                   </div>
 
                   <div className="flex items-center gap-1">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        duplicateLine(li);
+                      }}
+                      className="p-1 rounded bg-slate-800 hover:text-orange-400 text-slate-400"
+                      title="Duplicar batería de racks completa"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();

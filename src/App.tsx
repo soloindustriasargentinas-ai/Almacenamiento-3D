@@ -32,6 +32,8 @@ import {
   isWithinWarehouse,
   tryMoveWithConstraints,
   sanitizeGondolaDimensions,
+  findOpenPlacementSpot,
+  getDefaultCentralGondolaShelves,
 } from './utils/calculations';
 import { 
   ArrowLeft, 
@@ -50,6 +52,8 @@ import {
   LogOut,
   Sun,
   Ruler,
+  Undo2,
+  Copy,
 } from 'lucide-react';
 
 export default function App() {
@@ -91,6 +95,29 @@ export default function App() {
 
   // Global 3D State initialized cleanly to Salón Comercial
   const [state, setState] = useState<AppState>(() => createDefaultSalonState());
+
+  // Historial para botón Deshacer (Undo)
+  const [undoStack, setUndoStack] = useState<AppState[]>([]);
+
+  const updateStateWithHistory = useCallback((updater: React.SetStateAction<AppState>) => {
+    setState((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      if (next === prev) return prev;
+      setUndoStack((stack) => [...stack.slice(-29), prev]);
+      return next;
+    });
+  }, []);
+
+  const handleUndo = useCallback(() => {
+    setUndoStack((stack) => {
+      if (stack.length === 0) return stack;
+      const last = stack[stack.length - 1];
+      const newStack = stack.slice(0, stack.length - 1);
+      setState(last);
+      showNotification('Acción deshecha');
+      return newStack;
+    });
+  }, [showNotification]);
 
   // Switch between Salón and Depósito workspaces cleanly
   const handleSwitchSection = useCallback((newSection: 'salon' | 'deposito') => {
@@ -424,13 +451,28 @@ export default function App() {
     });
   }, []);
 
-  // Keyboard Navigation (Arrow Keys & Delete)
+  // Keyboard Navigation (Arrow Keys, Delete & Undo)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (screen !== 'visualizer') return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      // Undo shortcut (Ctrl + Z / Cmd + Z)
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        handleUndo();
+        return;
+      }
+
+      // Duplicate shortcut (Ctrl + D / Cmd + D)
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        handleDuplicateSelected();
+        return;
+      }
+
       const allowed = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Delete', 'Backspace'];
       if (!allowed.includes(e.key) || !selection.type || selection.idx === null) return;
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
       e.preventDefault();
 
@@ -494,7 +536,7 @@ export default function App() {
     if (!selection.type || selection.idx === null) return;
 
     if (selection.type === 'minirack') {
-      setState((prev) => {
+      updateStateWithHistory((prev) => {
         const lines = [...prev.lines];
         const cur = lines[selection.idx!];
         if (!cur) return prev;
@@ -523,7 +565,7 @@ export default function App() {
         return { ...prev, lines };
       });
     } else if (selection.type === 'estanteria') {
-      setState((prev) => {
+      updateStateWithHistory((prev) => {
         const shelfLines = [...prev.shelfLines];
         const cur = shelfLines[selection.idx!];
         if (!cur) return prev;
@@ -552,7 +594,7 @@ export default function App() {
         return { ...prev, shelfLines };
       });
     } else if (selection.type === 'gondolaPared') {
-      setState((prev) => {
+      updateStateWithHistory((prev) => {
         const lines = [...prev.gondolaPared.lines];
         const cur = lines[selection.idx!];
         if (!cur) return prev;
@@ -584,7 +626,7 @@ export default function App() {
         };
       });
     } else if (selection.type === 'gondolaCentral') {
-      setState((prev) => {
+      updateStateWithHistory((prev) => {
         const lines = [...prev.gondolaCentral.lines];
         const cur = lines[selection.idx!];
         if (!cur) return prev;
@@ -616,7 +658,7 @@ export default function App() {
         };
       });
     } else if (selection.type === 'obstacle') {
-      setState((prev) => {
+      updateStateWithHistory((prev) => {
         const obstacles = [...prev.obstacles];
         const cur = obstacles[selection.idx!];
         if (!cur || cur.type !== 'opening') return prev;
@@ -640,7 +682,7 @@ export default function App() {
         return { ...prev, obstacles };
       });
     } else if (selection.type === 'puntera') {
-      setState((prev) => {
+      updateStateWithHistory((prev) => {
         const punteras = [...(prev.punteras || [])];
         const cur = punteras[selection.idx!];
         if (!cur) return prev;
@@ -669,7 +711,7 @@ export default function App() {
         return { ...prev, punteras };
       });
     } else if (selection.type === 'heladera') {
-      setState((prev) => {
+      updateStateWithHistory((prev) => {
         const heladeras = [...(prev.heladeras || [])];
         const cur = heladeras[selection.idx!];
         if (!cur) return prev;
@@ -698,7 +740,7 @@ export default function App() {
         return { ...prev, heladeras };
       });
     } else if (selection.type === 'checkout') {
-      setState((prev) => {
+      updateStateWithHistory((prev) => {
         const checkouts = [...(prev.checkouts || [])];
         const cur = checkouts[selection.idx!];
         if (!cur) return prev;
@@ -727,7 +769,7 @@ export default function App() {
         return { ...prev, checkouts };
       });
     } else if (selection.type === 'door') {
-      setState((prev) => {
+      updateStateWithHistory((prev) => {
         const doors = [...(prev.doors || [])];
         const cur = doors[selection.idx!];
         if (!cur) return prev;
@@ -751,7 +793,7 @@ export default function App() {
         return { ...prev, doors };
       });
     } else if (selection.type === 'heavyRack') {
-      setState((prev) => {
+      updateStateWithHistory((prev) => {
         const lines = [...(prev.heavyRacks?.lines || [])];
         const cur = lines[selection.idx!];
         if (!cur) return prev;
@@ -782,14 +824,20 @@ export default function App() {
     }
   };
 
-  // Central Gondola Module Height Handler
+  // Central Gondola Module Height Handler (enforces shelf counts: 1.2m -> 3, 1.6m/1.75m -> 4, 2.0m -> 5)
   const handleSetGondolaCentralModuleHeight = useCallback((lineIdx: number, modIdx: number, height: number) => {
-    setState((prev) => {
+    const defShelves = getDefaultCentralGondolaShelves(height);
+    updateStateWithHistory((prev) => {
       const lines = [...prev.gondolaCentral.lines];
       const line = lines[lineIdx];
       if (!line) return prev;
       const updatedModules = [...line.modules];
-      updatedModules[modIdx] = { ...updatedModules[modIdx], height };
+      updatedModules[modIdx] = { 
+        ...updatedModules[modIdx], 
+        height,
+        scA: defShelves,
+        scB: defShelves,
+      };
       const maxH = updatedModules.reduce((max, m) => Math.max(max, m.height || height), height);
       lines[lineIdx] = { ...line, height: maxH, modules: updatedModules };
       return {
@@ -797,74 +845,240 @@ export default function App() {
         gondolaCentral: { ...prev.gondolaCentral, lines },
       };
     });
-  }, []);
+  }, [updateStateWithHistory]);
+
+  // Central Gondola Line Height Handler (applies to all modules in line: 1.2m -> 3, 1.6m/1.75m -> 4, 2.0m -> 5)
+  const handleSetGondolaCentralLineHeight = useCallback((lineIdx: number, height: number) => {
+    const defShelves = getDefaultCentralGondolaShelves(height);
+    updateStateWithHistory((prev) => {
+      const lines = [...prev.gondolaCentral.lines];
+      const line = lines[lineIdx];
+      if (!line) return prev;
+      lines[lineIdx] = {
+        ...line,
+        height,
+        modules: line.modules.map((m) => ({
+          ...m,
+          height,
+          scA: defShelves,
+          scB: defShelves,
+        })),
+      };
+      return {
+        ...prev,
+        gondolaCentral: { ...prev.gondolaCentral, lines },
+      };
+    });
+    showNotification(`Góndola Central ${lineIdx + 1}: ${height}m (${defShelves} estantes por lado)`);
+  }, [updateStateWithHistory, showNotification]);
 
   const handleDeleteSelected = () => {
     if (!selection.type || selection.idx === null) return;
 
     if (selection.type === 'minirack' && state.lines.length > 1) {
-      setState((prev) => ({
+      updateStateWithHistory((prev) => ({
         ...prev,
         lines: prev.lines.filter((_, i) => i !== selection.idx),
       }));
+      showNotification('Línea de Racks eliminada');
     } else if (selection.type === 'estanteria') {
-      setState((prev) => ({
+      updateStateWithHistory((prev) => ({
         ...prev,
         shelfLines: prev.shelfLines.filter((_, i) => i !== selection.idx),
       }));
+      showNotification('Línea de Estanterías eliminada');
     } else if (selection.type === 'gondolaPared') {
-      setState((prev) => ({
+      updateStateWithHistory((prev) => ({
         ...prev,
         gondolaPared: {
           ...prev.gondolaPared,
           lines: prev.gondolaPared.lines.filter((_, i) => i !== selection.idx),
         },
       }));
+      showNotification('Góndola de Pared eliminada');
     } else if (selection.type === 'gondolaCentral') {
-      setState((prev) => ({
+      updateStateWithHistory((prev) => ({
         ...prev,
         gondolaCentral: {
           ...prev.gondolaCentral,
           lines: prev.gondolaCentral.lines.filter((_, i) => i !== selection.idx),
         },
       }));
+      showNotification('Góndola Central eliminada');
     } else if (selection.type === 'obstacle') {
-      setState((prev) => ({
+      updateStateWithHistory((prev) => ({
         ...prev,
         obstacles: prev.obstacles.filter((_, i) => i !== selection.idx),
       }));
+      showNotification('Obstáculo eliminado');
     } else if (selection.type === 'puntera') {
-      setState((prev) => ({
+      updateStateWithHistory((prev) => ({
         ...prev,
         punteras: (prev.punteras || []).filter((_, i) => i !== selection.idx),
       }));
+      showNotification('Puntera eliminada');
     } else if (selection.type === 'heladera') {
-      setState((prev) => ({
+      updateStateWithHistory((prev) => ({
         ...prev,
         heladeras: (prev.heladeras || []).filter((_, i) => i !== selection.idx),
       }));
+      showNotification('Heladera eliminada');
     } else if (selection.type === 'checkout') {
-      setState((prev) => ({
+      updateStateWithHistory((prev) => ({
         ...prev,
         checkouts: (prev.checkouts || []).filter((_, i) => i !== selection.idx),
       }));
+      showNotification('Check Out eliminado');
     } else if (selection.type === 'door') {
-      setState((prev) => ({
+      updateStateWithHistory((prev) => ({
         ...prev,
         doors: (prev.doors || []).filter((_, i) => i !== selection.idx),
       }));
+      showNotification('Puerta eliminada');
     } else if (selection.type === 'heavyRack') {
-      setState((prev) => ({
+      updateStateWithHistory((prev) => ({
         ...prev,
         heavyRacks: {
           ...prev.heavyRacks,
           lines: (prev.heavyRacks?.lines || []).filter((_, i) => i !== selection.idx),
         },
       }));
+      showNotification('Rack Pesado eliminado');
     }
 
     setSelection({ type: null, idx: null });
   };
+
+  const handleDuplicateSelected = useCallback(() => {
+    if (!selection.type || selection.idx === null) return;
+    const { type, idx } = selection;
+
+    if (type === 'minirack' && state.lines[idx]) {
+      const orig = state.lines[idx];
+      const w = realMinirackLineWidth(orig);
+      const d = state.depth;
+      const spot = findOpenPlacementSpot(state, w, d);
+      const newLine = {
+        ...orig,
+        xOff: spot.x,
+        zOff: spot.z,
+        modules: orig.modules.map((m) => ({ ...m })),
+      };
+      updateStateWithHistory((prev) => ({
+        ...prev,
+        lines: [...prev.lines, newLine],
+      }));
+      setSelection({ type: 'minirack', idx: state.lines.length });
+      showNotification('Línea de Racks Livianos duplicada');
+    } else if (type === 'estanteria' && state.shelfLines[idx]) {
+      const orig = state.shelfLines[idx];
+      const w = realShelfLineWidth(orig);
+      const d = state.shelfDepth;
+      const spot = findOpenPlacementSpot(state, w, d);
+      const newLine = {
+        ...orig,
+        xOff: spot.x,
+        zOff: spot.z,
+        modules: orig.modules.map((m) => ({ ...m })),
+      };
+      updateStateWithHistory((prev) => ({
+        ...prev,
+        shelfLines: [...prev.shelfLines, newLine],
+      }));
+      setSelection({ type: 'estanteria', idx: state.shelfLines.length });
+      showNotification('Línea de Estanterías duplicada');
+    } else if (type === 'gondolaPared' && state.gondolaPared.lines[idx]) {
+      const orig = state.gondolaPared.lines[idx];
+      const w = realGondolaParedLineWidth(orig);
+      const d = state.gondolaPared.depth;
+      const spot = findOpenPlacementSpot(state, w, d);
+      const newLine = {
+        ...orig,
+        xOff: spot.x,
+        zOff: spot.z,
+        modules: orig.modules.map((m) => ({ ...m })),
+      };
+      updateStateWithHistory((prev) => ({
+        ...prev,
+        gondolaPared: {
+          ...prev.gondolaPared,
+          lines: [...prev.gondolaPared.lines, newLine],
+        },
+      }));
+      setSelection({ type: 'gondolaPared', idx: state.gondolaPared.lines.length });
+      showNotification('Línea de Góndola de Pared duplicada');
+    } else if (type === 'gondolaCentral' && state.gondolaCentral.lines[idx]) {
+      const orig = state.gondolaCentral.lines[idx];
+      const w = realGondolaCentralLineWidth(orig);
+      const d = state.gondolaCentral.depth * 2;
+      const spot = findOpenPlacementSpot(state, w, d);
+      const newLine = {
+        ...orig,
+        xOff: spot.x,
+        zOff: spot.z,
+        modules: orig.modules.map((m) => ({ ...m })),
+      };
+      updateStateWithHistory((prev) => ({
+        ...prev,
+        gondolaCentral: {
+          ...prev.gondolaCentral,
+          lines: [...prev.gondolaCentral.lines, newLine],
+        },
+      }));
+      setSelection({ type: 'gondolaCentral', idx: state.gondolaCentral.lines.length });
+      showNotification('Línea de Góndola Central duplicada');
+    } else if (type === 'heavyRack' && state.heavyRacks?.lines?.[idx]) {
+      const orig = state.heavyRacks.lines[idx];
+      const w = realHeavyRackLineWidth(orig);
+      const d = state.heavyRacks.depth || 1.10;
+      const spot = findOpenPlacementSpot(state, w, d);
+      const newLine = {
+        ...orig,
+        xOff: spot.x,
+        zOff: spot.z,
+        modules: orig.modules.map((m) => ({ ...m })),
+      };
+      updateStateWithHistory((prev) => ({
+        ...prev,
+        heavyRacks: {
+          ...(prev.heavyRacks || { height: 4.5, depth: 1.1, defaultLevels: 3 }),
+          lines: [...(prev.heavyRacks?.lines || []), newLine],
+        },
+      }));
+      setSelection({ type: 'heavyRack', idx: (state.heavyRacks?.lines?.length || 0) });
+      showNotification('Batería de Racks Pesados duplicada');
+    } else if (type === 'puntera' && state.punteras?.[idx]) {
+      const orig = state.punteras[idx];
+      const spot = findOpenPlacementSpot(state, orig.width || 0.9, orig.depth || 0.47);
+      const newItem = { ...orig, id: Date.now(), x: spot.x, z: spot.z };
+      updateStateWithHistory((prev) => ({
+        ...prev,
+        punteras: [...(prev.punteras || []), newItem],
+      }));
+      setSelection({ type: 'puntera', idx: (state.punteras?.length || 0) });
+      showNotification('Puntera duplicada');
+    } else if (type === 'heladera' && state.heladeras?.[idx]) {
+      const orig = state.heladeras[idx];
+      const spot = findOpenPlacementSpot(state, orig.width, orig.depth);
+      const newItem = { ...orig, id: Date.now(), x: spot.x, z: spot.z };
+      updateStateWithHistory((prev) => ({
+        ...prev,
+        heladeras: [...(prev.heladeras || []), newItem],
+      }));
+      setSelection({ type: 'heladera', idx: (state.heladeras?.length || 0) });
+      showNotification('Heladera duplicada');
+    } else if (type === 'checkout' && state.checkouts?.[idx]) {
+      const orig = state.checkouts[idx];
+      const spot = findOpenPlacementSpot(state, orig.length, orig.width);
+      const newItem = { ...orig, id: Date.now(), x: spot.x, z: spot.z };
+      updateStateWithHistory((prev) => ({
+        ...prev,
+        checkouts: [...(prev.checkouts || []), newItem],
+      }));
+      setSelection({ type: 'checkout', idx: (state.checkouts?.length || 0) });
+      showNotification('Check Out duplicado');
+    }
+  }, [selection, state, updateStateWithHistory, showNotification]);
 
   // PDF Print Output Handler
   const handlePrintPDF = () => {
@@ -1034,6 +1248,51 @@ export default function App() {
 
         {/* Action Controls */}
         <div className="flex items-center gap-2">
+          {/* Botón Deshacer (Undo) */}
+          <button
+            onClick={handleUndo}
+            disabled={undoStack.length === 0}
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all border ${
+              undoStack.length > 0
+                ? 'bg-slate-800 hover:bg-slate-700 text-amber-300 border-amber-500/40 hover:border-amber-400 cursor-pointer shadow-sm active:scale-95'
+                : 'bg-slate-900/50 text-slate-600 border-slate-800/80 cursor-not-allowed opacity-50'
+            }`}
+            title={
+              undoStack.length > 0
+                ? `Deshacer última acción (Ctrl+Z) - ${undoStack.length} paso(s) guardado(s)`
+                : 'Nada para deshacer (Ctrl+Z)'
+            }
+          >
+            <Undo2 className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Deshacer</span>
+            {undoStack.length > 0 && (
+              <span className="px-1.5 py-0.2 bg-amber-500/20 text-amber-300 text-[10px] rounded-full font-mono font-bold">
+                {undoStack.length}
+              </span>
+            )}
+          </button>
+
+          {/* Botón Duplicar Línea Seleccionada */}
+          <button
+            onClick={handleDuplicateSelected}
+            disabled={!selection.type || selection.idx === null}
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all border ${
+              selection.type !== null && selection.idx !== null
+                ? 'bg-slate-800 hover:bg-slate-700 text-sky-300 border-sky-500/50 hover:border-sky-400 cursor-pointer shadow-sm active:scale-95'
+                : 'bg-slate-900/50 text-slate-600 border-slate-800/80 cursor-not-allowed opacity-50'
+            }`}
+            title={
+              selection.type !== null && selection.idx !== null
+                ? 'Duplicar línea o elemento seleccionado completo (Ctrl+D)'
+                : 'Selecciona una línea en 3D o en el menú para duplicarla'
+            }
+          >
+            <Copy className="w-3.5 h-3.5 text-sky-400" />
+            <span className="hidden sm:inline">Duplicar Línea</span>
+          </button>
+
+          <div className="h-5 w-px bg-slate-800 mx-0.5 hidden sm:block" />
+
           {/* Cloud Save Button */}
           <button
             onClick={handleSaveToCloud}
@@ -1158,10 +1417,11 @@ export default function App() {
               selection={selection}
               onTabChange={setActiveTab}
               onSelect={setSelection}
-              onUpdateState={setState}
+              onUpdateState={updateStateWithHistory}
               onOpenSaveDialog={(act) => setSaveDialogAction(act)}
               onPrintPDF={handlePrintPDF}
               onSetGondolaCentralModuleHeight={handleSetGondolaCentralModuleHeight}
+              onSetGondolaCentralLineHeight={handleSetGondolaCentralLineHeight}
               onSwitchSection={handleSwitchSection}
             />
           </div>
@@ -1207,7 +1467,9 @@ export default function App() {
             onNudge={handleNudgeSelected}
             onRotate={handleRotateSelected}
             onDelete={handleDeleteSelected}
+            onDuplicate={handleDuplicateSelected}
             onSetGondolaCentralModuleHeight={handleSetGondolaCentralModuleHeight}
+            onSetGondolaCentralLineHeight={handleSetGondolaCentralLineHeight}
             onUpdateCheckout={handleUpdateCheckout}
           />
 

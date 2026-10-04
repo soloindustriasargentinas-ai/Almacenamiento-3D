@@ -25,6 +25,7 @@ import {
   realMinirackLineWidth,
   realShelfLineWidth,
   snap10,
+  getDefaultCentralGondolaShelves,
 } from '../utils/calculations';
 import { 
   Boxes, 
@@ -37,6 +38,7 @@ import {
   Plus, 
   RotateCw, 
   Trash2, 
+  Copy,
   Printer, 
   UserCheck, 
   Wrench, 
@@ -63,6 +65,7 @@ interface SidebarProps {
   onOpenSaveDialog: (action: 'save' | 'designer' | 'share') => void;
   onPrintPDF: () => void;
   onSetGondolaCentralModuleHeight?: (lineIdx: number, modIdx: number, height: number) => void;
+  onSetGondolaCentralLineHeight?: (lineIdx: number, height: number) => void;
   onSwitchSection?: (sec: 'salon' | 'deposito') => void;
 }
 
@@ -76,6 +79,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenSaveDialog,
   onPrintPDF,
   onSetGondolaCentralModuleHeight,
+  onSetGondolaCentralLineHeight,
   onSwitchSection,
 }) => {
   const summary = calculateSummary(state);
@@ -316,6 +320,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
     onSelect({ type: null, idx: null });
   };
 
+  const duplicateMinirackLine = (idx: number) => {
+    onUpdateState((prev) => {
+      const orig = prev.lines[idx];
+      if (!orig) return prev;
+      const w = realMinirackLineWidth(orig);
+      const d = prev.depth;
+      const spot = findOpenPlacementSpot(prev, w, d);
+      const newLine: MinirackLine = {
+        ...orig,
+        xOff: spot.x,
+        zOff: spot.z,
+        modules: orig.modules.map((m) => ({ ...m })),
+      };
+      return { ...prev, lines: [...prev.lines, newLine] };
+    });
+    onSelect({ type: 'minirack', idx: state.lines.length });
+  };
+
   // ── Handlers Estanterías ──
   const setShelfHeight = (h: number) => {
     onUpdateState((prev) => ({ ...prev, shelfHeight: h }));
@@ -489,6 +511,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
       shelfLines: prev.shelfLines.filter((_, i) => i !== idx),
     }));
     onSelect({ type: null, idx: null });
+  };
+
+  const duplicateShelfLine = (idx: number) => {
+    onUpdateState((prev) => {
+      const orig = prev.shelfLines[idx];
+      if (!orig) return prev;
+      const w = realShelfLineWidth(orig);
+      const d = prev.shelfDepth;
+      const spot = findOpenPlacementSpot(prev, w, d);
+      const newLine: ShelfLine = {
+        ...orig,
+        xOff: spot.x,
+        zOff: spot.z,
+        modules: orig.modules.map((m) => ({ ...m })),
+      };
+      return { ...prev, shelfLines: [...prev.shelfLines, newLine] };
+    });
+    onSelect({ type: 'estanteria', idx: state.shelfLines.length });
   };
 
   // ── Handlers Góndolas de Pared ──
@@ -701,20 +741,78 @@ export const Sidebar: React.FC<SidebarProps> = ({
     onSelect({ type: null, idx: null });
   };
 
+  const duplicateGondolaParedLine = (idx: number) => {
+    onUpdateState((prev) => {
+      const orig = prev.gondolaPared.lines[idx];
+      if (!orig) return prev;
+      const w = realGondolaParedLineWidth(orig);
+      const d = prev.gondolaPared.depth;
+      const spot = findOpenPlacementSpot(prev, w, d);
+      const newLine: GondolaParedLine = {
+        ...orig,
+        xOff: spot.x,
+        zOff: spot.z,
+        modules: orig.modules.map((m) => ({ ...m })),
+      };
+      return {
+        ...prev,
+        gondolaPared: {
+          ...prev.gondolaPared,
+          lines: [...prev.gondolaPared.lines, newLine],
+        },
+      };
+    });
+    onSelect({ type: 'gondolaPared', idx: state.gondolaPared.lines.length });
+  };
+
   // ── Handlers Góndolas Centrales ──
   const setGondolaCentralHeight = (h: number) => {
+    const defShelves = getDefaultCentralGondolaShelves(h);
     onUpdateState((prev) => ({
       ...prev,
       gondolaCentral: {
         ...prev.gondolaCentral,
         height: h,
+        shelfCount: defShelves,
         lines: prev.gondolaCentral.lines.map((l) => ({
           ...l,
           height: h,
-          modules: l.modules.map((m) => ({ ...m, height: h })),
+          modules: l.modules.map((m) => ({
+            ...m,
+            height: h,
+            scA: defShelves,
+            scB: defShelves,
+          })),
         })),
       },
     }));
+  };
+
+  const setGondolaCentralLineHeight = (lineIdx: number, h: number) => {
+    if (onSetGondolaCentralLineHeight) {
+      onSetGondolaCentralLineHeight(lineIdx, h);
+    } else {
+      const defShelves = getDefaultCentralGondolaShelves(h);
+      onUpdateState((prev) => {
+        const lines = [...prev.gondolaCentral.lines];
+        const line = lines[lineIdx];
+        if (!line) return prev;
+        lines[lineIdx] = {
+          ...line,
+          height: h,
+          modules: line.modules.map((m) => ({
+            ...m,
+            height: h,
+            scA: defShelves,
+            scB: defShelves,
+          })),
+        };
+        return {
+          ...prev,
+          gondolaCentral: { ...prev.gondolaCentral, lines },
+        };
+      });
+    }
   };
 
   const setGondolaCentralModuleHeight = (lineIdx: number, modIdx: number, h: number) => {
@@ -726,7 +824,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         const line = lines[lineIdx];
         if (!line) return prev;
         const updatedModules = [...line.modules];
-        updatedModules[modIdx] = { ...updatedModules[modIdx], height: h };
+        const defShelves = getDefaultCentralGondolaShelves(h);
+        updatedModules[modIdx] = { 
+          ...updatedModules[modIdx], 
+          height: h,
+          scA: defShelves,
+          scB: defShelves,
+        };
         const maxH = updatedModules.reduce((max, m) => Math.max(max, m.height || h), h);
         lines[lineIdx] = { ...line, height: maxH, modules: updatedModules };
         return {
@@ -812,12 +916,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const addGondolaCentralLine = () => {
     onUpdateState((prev) => {
+      const lineH = prev.gondolaCentral.height || 1.6;
+      const defShelves = getDefaultCentralGondolaShelves(lineH);
       const newLineMods = [
         {
           bl: 1.2,
-          height: prev.gondolaCentral.height || 1.6,
-          scA: prev.gondolaCentral.shelfCount || 3,
-          scB: prev.gondolaCentral.shelfCount || 3,
+          height: lineH,
+          scA: defShelves,
+          scB: defShelves,
           depthA: prev.gondolaCentral.depth || 0.47,
           depthB: prev.gondolaCentral.depth || 0.47,
         },
@@ -826,7 +932,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         xOff: 0,
         zOff: 0,
         rotation: 0,
-        height: prev.gondolaCentral.height,
+        height: lineH,
         modules: newLineMods,
       };
       const w = realGondolaCentralLineWidth(tempLine);
@@ -837,13 +943,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
         xOff: spot.x,
         zOff: spot.z,
         rotation: 0,
-        height: prev.gondolaCentral.height,
+        height: lineH,
         modules: newLineMods,
       };
       return {
         ...prev,
         gondolaCentral: {
           ...prev.gondolaCentral,
+          shelfCount: defShelves,
           lines: [...prev.gondolaCentral.lines, newLine],
         },
       };
@@ -889,15 +996,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
       const cur = lines[lineIdx];
       if (!cur) return prev;
       const lastMod = cur.modules[cur.modules.length - 1];
+      const modH = lastMod?.height || cur.height || prev.gondolaCentral.height || 1.6;
+      const defShelves = getDefaultCentralGondolaShelves(modH);
       const prospective = {
         ...cur,
         modules: [
           ...cur.modules,
           {
             bl: lastMod ? lastMod.bl : 1.2,
-            height: lastMod?.height || cur.height || prev.gondolaCentral.height || 1.6,
-            scA: lastMod ? lastMod.scA : (prev.gondolaCentral.shelfCount || 3),
-            scB: lastMod ? lastMod.scB : (prev.gondolaCentral.shelfCount || 3),
+            height: modH,
+            scA: lastMod ? lastMod.scA : defShelves,
+            scB: lastMod ? lastMod.scB : defShelves,
             depthA: lastMod?.depthA || prev.gondolaCentral.depth || 0.47,
             depthB: lastMod?.depthB || prev.gondolaCentral.depth || 0.47,
           },
@@ -982,7 +1091,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       const lines = [...prev.gondolaCentral.lines];
       const mod = lines[lineIdx].modules[modIdx];
       const updatedModules = [...lines[lineIdx].modules];
-      updatedModules[modIdx] = { ...mod, scA: Math.max(2, Math.min(8, (mod.scA || 3) + delta)) };
+      updatedModules[modIdx] = { ...mod, scA: Math.max(1, Math.min(8, (mod.scA || 3) + delta)) };
       lines[lineIdx] = { ...lines[lineIdx], modules: updatedModules };
       return {
         ...prev,
@@ -996,7 +1105,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       const lines = [...prev.gondolaCentral.lines];
       const mod = lines[lineIdx].modules[modIdx];
       const updatedModules = [...lines[lineIdx].modules];
-      updatedModules[modIdx] = { ...mod, scB: Math.max(2, Math.min(8, (mod.scB || 3) + delta)) };
+      updatedModules[modIdx] = { ...mod, scB: Math.max(1, Math.min(8, (mod.scB || 3) + delta)) };
       lines[lineIdx] = { ...lines[lineIdx], modules: updatedModules };
       return {
         ...prev,
@@ -1014,6 +1123,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
       },
     }));
     onSelect({ type: null, idx: null });
+  };
+
+  const duplicateGondolaCentralLine = (idx: number) => {
+    onUpdateState((prev) => {
+      const orig = prev.gondolaCentral.lines[idx];
+      if (!orig) return prev;
+      const w = realGondolaCentralLineWidth(orig);
+      const d = prev.gondolaCentral.depth * 2;
+      const spot = findOpenPlacementSpot(prev, w, d);
+      const newLine: GondolaCentralLine = {
+        ...orig,
+        xOff: spot.x,
+        zOff: spot.z,
+        modules: orig.modules.map((m) => ({ ...m })),
+      };
+      return {
+        ...prev,
+        gondolaCentral: {
+          ...prev.gondolaCentral,
+          lines: [...prev.gondolaCentral.lines, newLine],
+        },
+      };
+    });
+    onSelect({ type: 'gondolaCentral', idx: state.gondolaCentral.lines.length });
   };
 
   // ── Obstacles Handlers ──
@@ -1247,6 +1380,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
+                              duplicateMinirackLine(li);
+                            }}
+                            className="p-1 text-slate-400 hover:text-amber-400 border border-slate-800 rounded bg-slate-900 transition-colors"
+                            title="Duplicar línea completa"
+                          >
+                            <Copy className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
                               rotateMinirackLine(li);
                             }}
                             className="p-1 text-slate-400 hover:text-amber-400 border border-slate-800 rounded bg-slate-900"
@@ -1471,6 +1614,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
+                              duplicateShelfLine(si);
+                            }}
+                            className="p-1 text-slate-400 hover:text-sky-400 border border-slate-800 rounded bg-slate-900 transition-colors"
+                            title="Duplicar línea completa"
+                          >
+                            <Copy className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
                               rotateShelfLine(si);
                             }}
                             className="p-1 text-slate-400 hover:text-sky-400 border border-slate-800 rounded bg-slate-900"
@@ -1599,6 +1752,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <div className="flex justify-between items-center mb-1.5">
                       <span className="font-bold text-slate-200">Góndola Pared {gli + 1}</span>
                       <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            duplicateGondolaParedLine(gli);
+                          }}
+                          className="p-1 text-slate-400 hover:text-rose-400 border border-slate-800 rounded bg-slate-900 transition-colors"
+                          title="Duplicar línea completa"
+                        >
+                          <Copy className="w-3 h-3" />
+                        </button>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1779,6 +1942,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
+                            duplicateGondolaCentralLine(gcli);
+                          }}
+                          className="p-1 text-slate-400 hover:text-pink-400 border border-slate-800 rounded bg-slate-900 transition-colors"
+                          title="Duplicar línea completa"
+                        >
+                          <Copy className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
                             rotateGondolaCentralLine(gcli);
                           }}
                           className="px-2 py-1 text-[11px] font-bold text-pink-300 hover:text-white border border-slate-800 hover:border-pink-500 rounded bg-slate-900 flex items-center gap-1 transition-all"
@@ -1804,6 +1977,47 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       X: <strong className="text-slate-300">{line.xOff.toFixed(1)}m</strong> · Z:{' '}
                       <strong className="text-slate-300">{line.zOff.toFixed(1)}m</strong> · Largo:{' '}
                       <strong className="text-pink-400">{realGondolaCentralLineWidth(line).toFixed(2)}m</strong>
+                    </div>
+
+                    {/* Selector de Altura de la Línea Completa con Regla de Estantes */}
+                    <div className="flex flex-col gap-1 bg-slate-900/90 p-2 rounded-lg border border-slate-800 mb-2">
+                      <div className="flex justify-between items-center text-[10px]">
+                        <span className="text-slate-400 font-bold uppercase">Altura de Línea:</span>
+                        <span className="text-pink-400 font-mono font-bold">
+                          {line.height || 1.6}m ({getDefaultCentralGondolaShelves(line.height || 1.6)} estantes por lado)
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-4 gap-1 mt-0.5">
+                        {[
+                          { h: 1.2, label: '1.20m', shelves: '3 est.' },
+                          { h: 1.6, label: '1.60m', shelves: '4 est.' },
+                          { h: 1.75, label: '1.75m', shelves: '4 est.' },
+                          { h: 2.0, label: '2.00m', shelves: '5 est.' },
+                        ].map((opt) => {
+                          const curLineH = line.height || state.gondolaCentral.height || 1.6;
+                          const isSelH = Math.abs(curLineH - opt.h) < 0.05;
+                          return (
+                            <button
+                              key={opt.h}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setGondolaCentralLineHeight(gcli, opt.h);
+                              }}
+                              className={`py-1 px-1 rounded text-center transition-all cursor-pointer ${
+                                isSelH
+                                  ? 'bg-pink-500 text-slate-950 font-black shadow-sm ring-1 ring-pink-300'
+                                  : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-white font-semibold'
+                              }`}
+                              title={`Fijar altura a ${opt.h}m: ${opt.shelves} en ambos lados`}
+                            >
+                              <div className="text-[11px] leading-tight font-bold">{opt.label}</div>
+                              <div className={`text-[9px] ${isSelH ? 'text-slate-950 font-black' : 'text-slate-400'}`}>
+                                {opt.shelves}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
 
                     {/* Module chips with individual height, depth, Side A & Side B controls */}

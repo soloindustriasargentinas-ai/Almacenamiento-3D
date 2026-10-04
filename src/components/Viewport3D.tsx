@@ -33,6 +33,7 @@ import {
   realMinirackLineWidth,
   realShelfLineWidth,
   snap10,
+  getDefaultCentralGondolaShelves,
 } from '../utils/calculations';
 import { AppMaterials, initMaterials } from '../utils/materials';
 
@@ -637,8 +638,9 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
         const mH = mod.height || H;
         const sideA = mod.depthA || 0.47;
         const sideB = mod.depthB || 0.47;
-        const scA = mod.scA || state.gondolaCentral.shelfCount || 3;
-        const scB = mod.scB || state.gondolaCentral.shelfCount || 3;
+        const defShelves = getDefaultCentralGondolaShelves(mH);
+        const scA = mod.scA !== undefined && mod.scA > 0 ? mod.scA : defShelves;
+        const scB = mod.scB !== undefined && mod.scB > 0 ? mod.scB : defShelves;
         const centerZ = sideB;
 
         // Central divider panel (panel central ranurado)

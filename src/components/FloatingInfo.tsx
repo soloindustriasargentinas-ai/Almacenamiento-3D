@@ -6,7 +6,7 @@ import {
   realMinirackLineWidth,
   realShelfLineWidth,
 } from '../utils/calculations';
-import { X, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, RotateCw, Trash2, Check } from 'lucide-react';
+import { X, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, RotateCw, Trash2, Check, Copy } from 'lucide-react';
 
 interface FloatingInfoProps {
   state: AppState;
@@ -15,7 +15,9 @@ interface FloatingInfoProps {
   onNudge: (dx: number, dz: number) => void;
   onRotate: () => void;
   onDelete: () => void;
+  onDuplicate?: () => void;
   onSetGondolaCentralModuleHeight?: (lineIdx: number, modIdx: number, height: number) => void;
+  onSetGondolaCentralLineHeight?: (lineIdx: number, height: number) => void;
   onUpdateCheckout?: (idx: number, patch: Partial<CheckoutCounter>) => void;
 }
 
@@ -26,7 +28,9 @@ export const FloatingInfo: React.FC<FloatingInfoProps> = ({
   onNudge,
   onRotate,
   onDelete,
+  onDuplicate,
   onSetGondolaCentralModuleHeight,
+  onSetGondolaCentralLineHeight,
   onUpdateCheckout,
 }) => {
   if (!selection.type || selection.idx === null) return null;
@@ -142,37 +146,85 @@ export const FloatingInfo: React.FC<FloatingInfoProps> = ({
 
       <div className="text-[11px] text-slate-400 font-medium mb-2.5">{subInfo}</div>
 
-      {/* Góndola Central: Altura por módulo editable directamente */}
+      {/* Góndola Central: Altura de línea y por módulo editable directamente */}
       {centralLineModules && selection.type === 'gondolaCentral' && (
-        <div className="mb-3 p-2 bg-slate-950/70 rounded-xl border border-pink-900/40">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-pink-400 block mb-1.5">
-            Altura por Módulo Central:
-          </span>
-          <div className="space-y-1.5">
-            {centralLineModules.map((m, mi) => (
-              <div key={mi} className="flex items-center justify-between gap-1 text-[11px] bg-slate-900/90 p-1.5 rounded-lg border border-slate-800">
-                <span className="text-slate-300 font-semibold">Mód {mi + 1} ({m.bl}m):</span>
-                <div className="flex items-center gap-1">
-                  {[1.2, 1.6, 1.75, 2.0].map((h) => {
-                    const isSelected = m.height === h;
-                    return (
-                      <button
-                        key={h}
-                        onClick={() => onSetGondolaCentralModuleHeight?.(selection.idx!, mi, h)}
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all ${
-                          isSelected
-                            ? 'bg-pink-500 text-slate-950 shadow-sm ring-1 ring-pink-300'
-                            : 'bg-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-700'
-                        }`}
-                        title={`Seleccionar altura de ${h}m para el módulo ${mi + 1}`}
-                      >
-                        {h}m
-                      </button>
-                    );
-                  })}
+        <div className="mb-3 p-2.5 bg-slate-950/70 rounded-xl border border-pink-900/40 space-y-2">
+          {/* Altura de toda la línea */}
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-pink-400">
+                Altura Toda la Línea:
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono">
+                {state.gondolaCentral.lines[selection.idx!]?.height || 1.6}m
+              </span>
+            </div>
+            <div className="grid grid-cols-4 gap-1">
+              {[
+                { h: 1.2, label: '1.20m', shelves: '3 est.' },
+                { h: 1.6, label: '1.60m', shelves: '4 est.' },
+                { h: 1.75, label: '1.75m', shelves: '4 est.' },
+                { h: 2.0, label: '2.00m', shelves: '5 est.' },
+              ].map((opt) => {
+                const curH = state.gondolaCentral.lines[selection.idx!]?.height || 1.6;
+                const isSelected = Math.abs(curH - opt.h) < 0.05;
+                return (
+                  <button
+                    key={opt.h}
+                    onClick={() => onSetGondolaCentralLineHeight?.(selection.idx!, opt.h)}
+                    className={`py-1 px-1 rounded text-center transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-pink-500 text-slate-950 font-black shadow-sm ring-1 ring-pink-300'
+                        : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 font-semibold'
+                    }`}
+                    title={`Fijar altura ${opt.h}m: ${opt.shelves} en ambos lados`}
+                  >
+                    <div className="text-[10px] leading-tight font-bold">{opt.label}</div>
+                    <div className={`text-[8.5px] ${isSelected ? 'text-slate-950 font-black' : 'text-slate-400'}`}>
+                      {opt.shelves}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Altura por Módulo Individual */}
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+              Altura por Módulo:
+            </span>
+            <div className="space-y-1">
+              {centralLineModules.map((m, mi) => (
+                <div key={mi} className="flex items-center justify-between gap-1 text-[10px] bg-slate-900/90 p-1 rounded-lg border border-slate-800">
+                  <span className="text-slate-300 font-semibold">Mód {mi + 1} ({m.bl}m):</span>
+                  <div className="flex items-center gap-0.5">
+                    {[
+                      { h: 1.2, label: '1.2m', s: '3' },
+                      { h: 1.6, label: '1.6m', s: '4' },
+                      { h: 1.75, label: '1.75m', s: '4' },
+                      { h: 2.0, label: '2.0m', s: '5' },
+                    ].map((opt) => {
+                      const isSelected = Math.abs(m.height - opt.h) < 0.05;
+                      return (
+                        <button
+                          key={opt.h}
+                          onClick={() => onSetGondolaCentralModuleHeight?.(selection.idx!, mi, opt.h)}
+                          className={`px-1 py-0.5 rounded text-[9px] font-bold transition-all ${
+                            isSelected
+                              ? 'bg-pink-500 text-slate-950 shadow-sm ring-1 ring-pink-300 font-black'
+                              : 'bg-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-700'
+                          }`}
+                          title={`Fijar módulo ${mi + 1} a ${opt.h}m (${opt.s} estantes por lado)`}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -272,6 +324,15 @@ export const FloatingInfo: React.FC<FloatingInfoProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5">
+          {onDuplicate && (
+            <button
+              onClick={onDuplicate}
+              className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-blue-300 rounded-lg border border-slate-700/60 flex items-center gap-1 font-semibold transition-colors cursor-pointer"
+              title="Duplicar línea o elemento seleccionado completo"
+            >
+              <Copy className="w-3.5 h-3.5" /> Duplicar
+            </button>
+          )}
           <button
             onClick={onRotate}
             className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 rounded-lg border border-slate-700/60 flex items-center gap-1 font-semibold"
